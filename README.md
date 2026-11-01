@@ -1,7 +1,6 @@
 # <img src="internal/appicon/appicon.png" alt="" width="40" height="40"> RegHead
 
-A desktop regular expression tester in the spirit of
-[regex101](https://regex101.com/), written in Go with a Qt 6 interface using the
+A desktop regular expression tester, written in Go with a Qt 6 interface using the
 [miqt](https://github.com/mappu/miqt) bindings.
 
 ![RegHead showing a date pattern, its highlighted matches, a substitution, the explanation and the list of matches](docs/screenshot.png)
@@ -77,9 +76,8 @@ selecting the whole field and pressing Ctrl+C:
 
 ## Colours
 
-Syntax highlighting uses the default match and token colours of
-[regex101](https://regex101.com/). The rest of the interface uses RegHead's own
-themes.
+Syntax highlighting has its own colours, for matches and for the parts of a pattern.
+The rest of the interface follows the theme.
 
 ## Engines
 

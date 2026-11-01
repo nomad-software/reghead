@@ -1,6 +1,6 @@
 # RegHead
 
-A regular expression tester, similar to regex101, in Go with a Qt 6 UI through
+A regular expression tester in Go with a Qt 6 UI through
 miqt (`github.com/mappu/miqt/qt6`). The app is called RegHead; the binary, module
 and folders are `reghead`. Keep the README up to date with any change users see.
 
@@ -62,9 +62,8 @@ the engine package imports Qt, which takes minutes and is not a hang.
   nothing can edit it. `config.Pattern` and the field never hold it:
   `SplitInlineFlags` moves leading flags typed, pasted or loaded to the dropdown.
   Flags later in a pattern, or scoped or negative ones, are regex and stay.
-- **Colours:** `syntax.go` holds regex101's syntax colours (match fills and
-  tokens) and nothing else from that site. Never use its UI theme colours; the
-  app's palettes are in `theme.go`. The dot of a row in the match list and its
+- **Colours:** `syntax.go` holds only the syntax colours (match fills and tokens).
+  The app's palettes are in `theme.go`, and the two stay apart. The dot of a row in the match list and its
   highlight in the text both come from `syntax.fill`. Theme changes redraw through `render`.
 - **Tokens:** explainer tokens are recorded with `emit` as the pattern is walked.
   Every node's tokens must spell its `Source`; `FuzzEngines` checks it. `Evaluate`
@@ -73,7 +72,7 @@ the engine package imports Qt, which takes minutes and is not a hang.
 - **Hover** (`hover.go`) lights up one `hoverTarget` in the pattern, replacement,
   text, result and list, in the group's `syntax.edge` colour. A group's place in the pattern comes from
   `Result.GroupRanges`, which `Evaluate` collects from each `Node.group`. The static
-  regex colours are by token type, as on regex101, so only hover links them to
+  regex colours are by token type, so only hover links them to
   match colours.
 - **The regex and replacement fields** (`linefield.go`) are `QPlainTextEdit`s made
   single-line, as a `QLineEdit` cannot colour parts of its text. Colours are extra selections, which

@@ -9,15 +9,13 @@ import (
 // tokenColour is how a token of a pattern is drawn.
 type tokenColour struct{ text, background string }
 
-// syntax is the colours of matches and patterns. They are the default syntax
-// colours of regex101.com, for this purpose only; the program's own light and
-// dark palettes are in theme.go.
+// syntax is the colours of matches and patterns. The program's own light and dark
+// palettes are in theme.go.
 type syntax struct {
 	// fills holds, for the whole match and then for each group, the background
-	// of odd and even matches. regex101 mixes these from its --match-group-N
-	// colours, in oklab; they are written out as Qt cannot.
+	// of odd and even matches.
 	fills [7][2]string
-	// edges holds the --match-group-N colours themselves, which outline a dot in
+	// edges holds the strong colour of each, which outlines a dot in
 	// the list of matches, where a pale fill alone would hardly show.
 	edges [7]string
 	// groups holds the brackets of groups by how deeply they nest.
