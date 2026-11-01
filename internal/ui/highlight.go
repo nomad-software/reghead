@@ -1,0 +1,228 @@
+package ui
+
+import (
+	"fmt"
+	"html"
+	"runtime"
+	"strings"
+
+	qt "github.com/mappu/miqt/qt6"
+
+	"github.com/nomad-software/reghead/internal/engine"
+)
+
+// render draws all that is coloured by the result, as the theme also changes.
+func (w *Window) render() {
+	if w.result == nil {
+		return
+	}
+	palette := w.Palette()
+	base := palette.ColorWithCr(qt.QPalette__Base)
+	colours := syntaxFor(base.Lightness() < 128)
+	w.colours = colours
+	runtime.KeepAlive(palette)
+
+	w.errorLabel.SetStyleSheet("color: " + colours.errorText)
+	w.inlineFlags.SetStyleSheet(tokenStyle(colours.token(engine.Token{Kind: engine.TokenModifier})))
+	w.explanation.SetHtml(explanationHTML(w.result.Explanation, colours))
+	// The rows are replaced by this, including any lit up.
+	w.litRows = nil
+	w.listMatches(w.result, colours)
+	w.paintHighlights(colours)
+}
+
+// paintHighlights draws what changes with what the mouse is over.
+func (w *Window) paintHighlights(colours syntax) {
+	w.paint(colours)
+	w.paintRegex(colours)
+	w.paintReplacement(colours)
+	w.paintRows(colours)
+}
+
+// paintRegex highlights the pattern in the regex field. Literals are left plain.
+func (w *Window) paintRegex(colours syntax) {
+	text := w.regex.Text()
+	offsets := engine.NewOffsets(text)
+	var spans []paintedSpan
+	at := 0
+	for _, token := range w.result.Tokens {
+		end := at + len(token.Text)
+		// The tokens are of the pattern that was evaluated, and a change since
+		// then has a new result on its way.
+		if end > len(text) || text[at:end] != token.Text {
+			return
+		}
+		if c := colours.token(token); c.text != "" {
+			spans = append(spans, paintedSpan{engine.Span{Start: at, End: end}, c.background, c.text})
+		}
+		at = end
+	}
+	if g := w.hover.group; g >= 0 && g < len(w.result.GroupRanges) {
+		spans = append(spans, paintedSpan{w.result.GroupRanges[g], colours.edge(g), colours.hoverText})
+	}
+	highlight(w.regex.QPlainTextEdit, spans, offsets)
+}
+
+// explanationHTML sets out the steps of an explanation, indented by depth: each
+// fragment, highlighted as a pattern, with what it does after it.
+func explanationHTML(nodes []engine.Node, colours syntax) string {
+	var b strings.Builder
+	fixed := qt.QFontDatabase_SystemFont(qt.QFontDatabase__FixedFont)
+	family := html.EscapeString(fixed.Family())
+	runtime.KeepAlive(fixed)
+	var walk func(nodes []engine.Node, depth int)
+	walk = func(nodes []engine.Node, depth int) {
+		for _, n := range nodes {
+			fmt.Fprintf(&b, `<p style="margin-left:%dpx;margin-top:0;margin-bottom:6px"><span style="font-family:'%s'">`, depth*20, family)
+			for _, token := range n.Tokens {
+				text := strings.ReplaceAll(html.EscapeString(token.Text), " ", "&nbsp;")
+				fmt.Fprintf(&b, `<span style="%s">%s</span>`, tokenStyle(colours.token(token)), text)
+			}
+			fmt.Fprintf(&b, `</span>&nbsp;&nbsp;%s</p>`, html.EscapeString(n.Text))
+			walk(n.Children, depth+1)
+		}
+	}
+	walk(nodes, 0)
+	return b.String()
+}
+
+// paint colours the matches and their groups in the text, and the replacements
+// in the output, in the colours of the list of matches.
+func (w *Window) paint(colours syntax) {
+	// Later ones are drawn over earlier ones, so a group shows over its match, one
+	// nested in it over that, and what is hovered over everything.
+	var spans, lit []paintedSpan
+	for i, m := range w.result.Matches[:min(len(w.result.Matches), maxShown)] {
+		for g, span := range m.Groups {
+			if span.Start < 0 {
+				continue
+			}
+			spans = append(spans, paintedSpan{span, colours.fill(g, i), ""})
+			if w.hovered(i, g) {
+				lit = append(lit, paintedSpan{span, colours.edge(g), colours.hoverText})
+			}
+		}
+	}
+	highlight(w.text, append(spans, lit...), w.result.Offsets)
+	if w.result.OutputOffsets != nil {
+		highlight(w.output, w.outputSpans(colours), w.result.OutputOffsets)
+	}
+}
+
+// outputSpans returns the colours of the output: as in the text, each replacement
+// in the colour of its match, with the text of each group in the group's colour.
+func (w *Window) outputSpans(colours syntax) []paintedSpan {
+	replaced := w.result.Replaced[:min(len(w.result.Replaced), maxShown)]
+	var spans, lit []paintedSpan
+	for i, span := range replaced {
+		spans = append(spans, paintedSpan{span, colours.fill(0, i), ""})
+		if w.hovered(i, 0) {
+			lit = append(lit, paintedSpan{span, colours.edge(0), colours.hoverText})
+		}
+	}
+	for _, r := range w.result.ReplacedGroups {
+		if r.Match >= len(replaced) {
+			break
+		}
+		if r.Group > 0 {
+			spans = append(spans, paintedSpan{r.Span, colours.fill(r.Group, r.Match), ""})
+		}
+		if r.Group > 0 && w.hovered(r.Match, r.Group) {
+			lit = append(lit, paintedSpan{r.Span, colours.edge(r.Group), colours.hoverText})
+		}
+	}
+	return append(spans, lit...)
+}
+
+// paintReplacement highlights the replacement field: references to groups as groups
+// are in the pattern, and what is lit up by the hover.
+func (w *Window) paintReplacement(colours syntax) {
+	text := w.replacement.Text()
+	var spans, lit []paintedSpan
+	at := 0
+	for _, part := range w.result.ReplacementParts {
+		end := at + len(part.Source)
+		// The parts are of the template that was evaluated, and a change since then
+		// has a new result on its way.
+		if end > len(text) || text[at:end] != part.Source {
+			return
+		}
+		span := engine.Span{Start: at, End: end}
+		kind := engine.TokenLiteral
+		switch {
+		case part.IsRef || part.Before || part.After:
+			kind = engine.TokenGroup
+		case part.Escaped:
+			kind = engine.TokenEscaped
+		}
+		if c := colours.token(engine.Token{Kind: kind}); c.text != "" {
+			spans = append(spans, paintedSpan{span, c.background, c.text})
+		}
+		if g := w.hover.group; g >= 0 && part.IsRef && part.GroupOf(w.result.GroupNames) == g {
+			lit = append(lit, paintedSpan{span, colours.edge(g), colours.hoverText})
+		}
+		at = end
+	}
+	// The whole match is what the whole of the replacement takes the place of.
+	if w.hover.group == 0 && text != "" {
+		lit = []paintedSpan{{engine.Span{Start: 0, End: len(text)}, colours.edge(0), colours.hoverText}}
+	}
+	highlight(w.replacement.QPlainTextEdit, append(spans, lit...), engine.NewOffsets(text))
+}
+
+// paintedSpan is a span of an editor and how it is coloured.
+type paintedSpan struct {
+	engine.Span
+	// background is its colour, and text that of its text, if it has its own.
+	background, text string
+}
+
+// highlight colours spans of an editor.
+func highlight(edit *qt.QPlainTextEdit, spans []paintedSpan, offsets *engine.Offsets) {
+	formats := map[[2]string]*qt.QTextCharFormat{}
+	for _, span := range spans {
+		key := [2]string{span.background, span.text}
+		if formats[key] == nil {
+			formats[key] = newSpanFormat(span.background, span.text)
+		}
+	}
+	selections := make([]qt.QTextEdit__ExtraSelection, 0, len(spans))
+	for _, span := range spans {
+		format := formats[[2]string{span.background, span.text}]
+		cursor := edit.TextCursor()
+		cursor.SetPosition(offsets.UTF16(span.Start))
+		cursor.SetPosition2(offsets.UTF16(span.End), qt.QTextCursor__KeepAnchor)
+		selection := qt.NewQTextEdit__ExtraSelection2()
+		selection.SetCursor(*cursor)
+		selection.SetFormat(*format)
+		selections = append(selections, *selection)
+		runtime.KeepAlive(cursor)
+	}
+	edit.SetExtraSelections(selections)
+	for i := range selections {
+		selections[i].Delete()
+	}
+	for _, format := range formats {
+		format.Delete()
+	}
+}
+
+// newSpanFormat returns the format of a span.
+func newSpanFormat(background, text string) *qt.QTextCharFormat {
+	format := qt.NewQTextCharFormat()
+	if background != "" {
+		colour := qt.NewQColor6(background)
+		brush := qt.NewQBrush3(colour)
+		format.SetBackground(brush)
+		brush.Delete()
+		colour.Delete()
+	}
+	if text != "" {
+		colour := qt.NewQColor6(text)
+		brush := qt.NewQBrush3(colour)
+		format.SetForeground(brush)
+		brush.Delete()
+		colour.Delete()
+	}
+	return format
+}

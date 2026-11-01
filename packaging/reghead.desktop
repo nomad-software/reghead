@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=RegHead
+Comment=Test regular expressions
+Exec=reghead
+Icon=reghead
+Categories=Development;
+Terminal=false
+StartupWMClass=reghead
