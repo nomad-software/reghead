@@ -20,10 +20,10 @@ fuzz:
 	go test ./internal/engine -run '^$$' -fuzz FuzzEngines -fuzztime 60s
 	go test ./internal/engine -run '^$$' -fuzz FuzzReplacement -fuzztime 30s
 
-# Renders the window offscreen into docs/screenshot.png.
+# Renders the window offscreen, in the dark theme, into docs/screenshot.png.
 screenshot:
 	mkdir -p docs
-	REGHEAD_SCREENSHOT=$(CURDIR)/docs/screenshot.png go test -count=1 -run '^TestScreenshot$$' ./internal/ui/
+	REGHEAD_THEME=dark REGHEAD_SCREENSHOT=$(CURDIR)/docs/screenshot.png go test -count=1 -run '^TestScreenshot$$' ./internal/ui/
 
 # Makes the icon of the macOS app from the program's icon, within the margin Apple's
 # grid gives icons. Run it again whenever the icon changes. It needs ImageMagick.
