@@ -455,6 +455,42 @@ func TestChoosingEngine(t *testing.T) {
 	})
 }
 
+// Flags saved that the engine does not have take no effect.
+func TestLoadedFlagsAreOffered(t *testing.T) {
+	s := settings.Default()
+	s.Flags = "gixyU"
+	w, _ := open(t, s)
+	mainthread.Wait(func() {
+		if w.config.Flags != "giU" {
+			t.Errorf("flags %q", w.config.Flags)
+		}
+		w.Close()
+	})
+}
+
+// Moving the mouse while a new result is on its way leaves the old colours alone,
+// as their positions may not fit the text, and the new result is drawn in full.
+func TestNoPaintingWhileEvaluating(t *testing.T) {
+	s := settings.Default()
+	s.Pattern, s.Text, s.Flags = "(a)", strings.Repeat("a", 50), "g"
+	w, _ := open(t, s)
+	mainthread.Wait(func() {
+		w.hoverPatternAt(1)
+		w.text.SetPlainText("a")
+		if !w.running && !w.pending {
+			t.Fatal("no evaluation under way")
+		}
+		w.setHover(noHover)
+	})
+	settle(t, w)
+	mainthread.Wait(func() {
+		if got := len(w.text.ExtraSelections()); got != 2 {
+			t.Errorf("%d highlights after the new result", got)
+		}
+		w.Close()
+	})
+}
+
 func TestSettingsDialog(t *testing.T) {
 	w, path := open(t, settings.Default())
 	mainthread.Wait(func() {
@@ -780,6 +816,12 @@ func TestHover(t *testing.T) {
 		w.hoverPatternAt(5)
 		if got := spanColours(t, w.text, colours.edge(2)); !slices.Equal(got, []string{"b"}) {
 			t.Errorf("optional group %q", got)
+		}
+		for i, want := range []bool{false, true} {
+			brush := w.matches.TopLevelItem(i).Child(1).Background(0)
+			if lit := brush.Style() != qt.NoBrush; lit != want {
+				t.Errorf("optional group's row in match %d: lit %v", i+1, lit)
+			}
 		}
 		// Outside any group is the whole match.
 		w.hoverPatternAt(0)

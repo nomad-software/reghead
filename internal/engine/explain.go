@@ -152,6 +152,8 @@ type explainer struct {
 	depth  int
 	state  explainState
 	tokens []span
+	// branchReset says the next alternation is the inside of a branch reset group.
+	branchReset bool
 	// number hands specialGroup's group number back to group.
 	number int
 }
@@ -165,9 +167,23 @@ func (p *explainer) alternation() []Node {
 	start := p.pos
 	var alts []Node
 	var first []Node
+	// In a branch reset, each alternative numbers its groups from the same place, and
+	// what follows numbers on from the one that had the most.
+	reset := p.branchReset
+	p.branchReset = false
+	base, most := p.groups, p.groups
+	defer func() {
+		if reset {
+			p.groups = most
+		}
+	}()
 	for i := 1; ; i++ {
 		altStart := p.pos
+		if reset {
+			p.groups = base
+		}
 		seq := p.sequence()
+		most = max(most, p.groups)
 		if i == 1 {
 			first = seq
 		}
@@ -646,6 +662,7 @@ func (p *explainer) specialGroup(start int, text *string) (Node, bool) {
 		if strings.HasPrefix(rest, form.prefix) {
 			p.pos += len(form.prefix)
 			*text = form.text
+			p.branchReset = form.prefix == "?|"
 			return Node{}, false
 		}
 	}

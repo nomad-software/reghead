@@ -226,7 +226,9 @@ func (w *Window) paintRows(colours syntax) {
 	}
 	shown := min(len(w.result.Matches), maxShown)
 	for i := range shown {
-		if !w.hovered(i, w.hover.group) || w.hover.group >= len(w.result.Matches[i].Groups) {
+		groups := w.result.Matches[i].Groups
+		// A group that took no part in this match has nothing here to light up.
+		if !w.hovered(i, w.hover.group) || w.hover.group >= len(groups) || groups[w.hover.group].Start < 0 {
 			continue
 		}
 		row := w.matches.TopLevelItem(i)

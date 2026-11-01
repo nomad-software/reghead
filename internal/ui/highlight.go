@@ -33,6 +33,11 @@ func (w *Window) render() {
 
 // paintHighlights draws what changes with what the mouse is over.
 func (w *Window) paintHighlights(colours syntax) {
+	// The result is of text that has since changed, and its positions may not fit. The
+	// new result paints when it comes.
+	if w.running {
+		return
+	}
 	w.paint(colours)
 	w.paintRegex(colours)
 	w.paintReplacement(colours)

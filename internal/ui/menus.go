@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	qt "github.com/mappu/miqt/qt6"
 
 	"github.com/nomad-software/reghead/internal/engine"
@@ -101,13 +99,7 @@ func (w *Window) setEngine(e engine.Engine) {
 	w.engine = e
 	w.regexTitle.SetText(regexTitleText(e))
 	w.replacement.SetPlaceholderText(e.ReplacementHint())
-	kept := ""
-	for _, f := range w.allFlags() {
-		if strings.Contains(w.config.Flags, f.Key) {
-			kept += f.Key
-		}
-	}
-	w.config.Flags = kept
+	w.config.Flags = w.offeredFlags(w.config.Flags)
 	w.fillFlagsMenu()
 }
 

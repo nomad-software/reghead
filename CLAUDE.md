@@ -83,7 +83,9 @@ the engine package imports Qt, which takes minutes and is not a hang.
 - **Evaluation is off the UI thread:** `Window.refresh` runs one `Evaluate` at a
   time in a goroutine, and returns to the UI with `mainthread.Start`. Changes made
   meanwhile set `pending`, the stale result is dropped and a new run starts. A
-  backtracking engine can take seconds. Tests wait with `settle`.
+  backtracking engine can take seconds. Nothing paints from a result while `running`,
+  as its positions may not fit the text. `Evaluate` recovers from panics, as one there
+  would end the program. Tests wait with `settle`.
 - **Explanations walk the pattern text**, not a parsed tree, which for Go would
   simplify what was typed. The pattern need not compile. `explain` must never panic,
   and its top level `Source` values must join up to the whole pattern; `FuzzEngines`

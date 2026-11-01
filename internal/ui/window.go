@@ -95,7 +95,7 @@ func NewWindow(path string) *Window {
 		engine:      engine.ByName(config.Engine),
 		hover:       noHover,
 	}
-	w.config.Flags, w.config.Pattern = takeInlineFlags(w.engine, config.Flags, config.Pattern)
+	w.config.Flags, w.config.Pattern = takeInlineFlags(w.engine, w.offeredFlags(config.Flags), config.Pattern)
 	w.SetWindowTitle("RegHead")
 	w.SetWindowIcon(appIcon())
 	w.Resize(config.Width, config.Height)

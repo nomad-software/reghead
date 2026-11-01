@@ -33,14 +33,20 @@ func (w *Window) allFlags() []engine.Flag {
 	return append([]engine.Flag{{Key: engine.FlagGlobal, Label: "Global"}}, w.engine.Flags()...)
 }
 
-// flagsChanged shows the flags on the dropdown and in the regex field.
-func (w *Window) flagsChanged() {
-	shown := ""
+// offeredFlags returns those of the flags that the engine has, in its own order.
+func (w *Window) offeredFlags(flags string) string {
+	kept := ""
 	for _, f := range w.allFlags() {
-		if strings.Contains(w.config.Flags, f.Key) {
-			shown += f.Key
+		if strings.Contains(flags, f.Key) {
+			kept += f.Key
 		}
 	}
+	return kept
+}
+
+// flagsChanged shows the flags on the dropdown and in the regex field.
+func (w *Window) flagsChanged() {
+	shown := w.offeredFlags(w.config.Flags)
 	// The spaces keep the text clear of the dropdown's arrow.
 	text := "Flags"
 	if shown != "" {

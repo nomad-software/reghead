@@ -254,6 +254,34 @@ func TestDialectExplanations(t *testing.T) {
 	}
 }
 
+// The numbers in a branch reset are those PCRE2 gives, for explaining and hovering.
+func TestBranchReset(t *testing.T) {
+	r := Evaluate(Request{Engine: ByName(pcreName), Pattern: `(?|(a)|(b)(x))(c)`, Flags: "g", Text: "bxc"})
+	if len(r.Matches) != 1 || len(r.GroupRanges) != 4 {
+		t.Fatalf("%+v", r)
+	}
+	if !slices.Equal(r.GroupRanges, []Span{{0, 17}, {3, 6}, {10, 13}, {14, 17}}) {
+		t.Errorf("ranges %+v", r.GroupRanges)
+	}
+	last := r.Explanation[len(r.Explanation)-1]
+	if last.Text != "Capture group 3" {
+		t.Errorf("group after it: %q", last.Text)
+	}
+}
+
+// panicEngine stands for an engine with a bug in it.
+type panicEngine struct{ jsEngine }
+
+func (panicEngine) Compile(string, string) (Regex, error) { panic("a bug") }
+
+// An engine's bug is a message about the pattern, not the end of the program.
+func TestEvaluateSurvivesPanic(t *testing.T) {
+	r := Evaluate(Request{Engine: panicEngine{}, Pattern: "a", Text: "a"})
+	if !strings.Contains(r.Error, "a bug") || r.Offsets == nil {
+		t.Errorf("%+v", r)
+	}
+}
+
 func TestDialectTokens(t *testing.T) {
 	nodes := ByName(pcreName).Explain(`(?=a)\1(?#c)`, "")
 	var kinds []TokenKind

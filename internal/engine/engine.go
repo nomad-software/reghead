@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -228,8 +229,15 @@ type Result struct {
 
 // Evaluate runs a request. It takes no part in the UI, so that it can run away
 // from the UI's thread.
-func Evaluate(q Request) Result {
-	r := Result{Text: q.Text, Offsets: NewOffsets(q.Text)}
+func Evaluate(q Request) (r Result) {
+	// It runs on a goroutine of its own, where a panic would end the program and lose
+	// what was entered, over what is at worst one bad pattern.
+	defer func() {
+		if failure := recover(); failure != nil {
+			r = Result{Text: q.Text, Offsets: NewOffsets(q.Text), Error: fmt.Sprintf("the engine failed on this pattern: %v", failure)}
+		}
+	}()
+	r = Result{Text: q.Text, Offsets: NewOffsets(q.Text)}
 	if q.Substitute {
 		r.ReplacementParts = q.Engine.ParseReplacement(q.Replacement, nil)
 	}
@@ -272,7 +280,8 @@ func Evaluate(q Request) Result {
 // collectGroups notes where in the pattern each group lies.
 func collectGroups(nodes []Node, ranges []Span) {
 	for _, n := range nodes {
-		if n.group > 0 && n.group < len(ranges) {
+		// A branch reset has several groups of one number. The first stands for them.
+		if n.group > 0 && n.group < len(ranges) && ranges[n.group] == (Span{}) {
 			ranges[n.group] = Span{n.start, n.end}
 		}
 		collectGroups(n.Children, ranges)

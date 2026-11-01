@@ -1,4 +1,4 @@
-# RegHead
+# <img src="internal/appicon/appicon.png" alt="" width="40" height="40"> RegHead
 
 A desktop regular expression tester in the spirit of
 [regex101](https://regex101.com/), written in Go with a Qt 6 interface using the
@@ -11,7 +11,7 @@ A desktop regular expression tester in the spirit of
 - **Three engines.** Go, PCRE2 and JavaScript. The flags, the
   replacement syntax, the explanation and what Copy gives all follow the engine
   chosen. See [Engines](#engines).
-- **Live matching.** Matches and their groups are highlighted in the test text
+- **Live matching.** Matches and their groups are highlighted in the text
   as you type, each group in its own colour. Shades alternate so that matches
   that touch can be told apart. A dot beside each row of the match list shows its
   colour.
@@ -19,7 +19,7 @@ A desktop regular expression tester in the spirit of
   while it is still incomplete.
 - **Substitution.** Enter a replacement and see the resulting text below it.
   References such as `${day}` are highlighted, and in the result each group's text
-  has the same colour as in the test text.
+  has the same colour as in the text.
 - **Plain language explanation.** A pane breaks the pattern down, step by step,
   exactly as you typed it, with each syntax highlighted fragment followed by
   what it does.
