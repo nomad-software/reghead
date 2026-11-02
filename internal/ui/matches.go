@@ -52,9 +52,9 @@ func (w *Window) matchDot(fill, edge string) *qt.QIcon {
 	size := int(math.Ceil(matchDotSize * ratio))
 	pixmap := qt.NewQPixmap2(size, size)
 	defer pixmap.Delete()
-	clear := qt.NewQColor2(qt.Transparent)
-	defer clear.Delete()
-	pixmap.FillWithFillColor(clear)
+	transparent := qt.NewQColor2(qt.Transparent)
+	defer transparent.Delete()
+	pixmap.FillWithFillColor(transparent)
 	if fill != "" {
 		painter := qt.NewQPainter2(pixmap.QPaintDevice)
 		painter.SetRenderHint(qt.QPainter__Antialiasing)
@@ -69,9 +69,11 @@ func (w *Window) matchDot(fill, edge string) *qt.QIcon {
 		painter.DrawEllipse(bounds)
 		painter.End()
 		painter.Delete()
-		for _, deleted := range []func(){bounds.Delete, pen.Delete, brush.Delete, fillColour.Delete, edgeColour.Delete} {
-			deleted()
-		}
+		bounds.Delete()
+		pen.Delete()
+		brush.Delete()
+		fillColour.Delete()
+		edgeColour.Delete()
 	}
 	pixmap.SetDevicePixelRatio(ratio)
 	icon := qt.NewQIcon2(pixmap)

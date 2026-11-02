@@ -7,6 +7,9 @@ import (
 	"github.com/nomad-software/reghead/internal/settings"
 )
 
+// modes are the modes, in the order of their menu.
+var modes = []string{settings.ModeMatch, settings.ModeSubstitute}
+
 // radioGroup adds actions to a menu of which one is checked at a time.
 func radioGroup(menu *qt.QMenu, labels []string, checked int, chosen func(i int)) []*qt.QAction {
 	group := qt.NewQActionGroup(menu.QObject)
@@ -47,8 +50,7 @@ func (w *Window) makeMenus() {
 	if w.config.Mode == settings.ModeSubstitute {
 		checked = 1
 	}
-	w.modes = []string{settings.ModeMatch, settings.ModeSubstitute}
-	w.modeActions = radioGroup(mode, []string{"&Match", "&Substitution"}, checked, func(i int) { w.setMode(w.modes[i]) })
+	w.modeActions = radioGroup(mode, []string{"&Match", "&Substitution"}, checked, func(i int) { w.setMode(modes[i]) })
 	shortcut(w.modeActions[0], "Ctrl+1")
 	shortcut(w.modeActions[1], "Ctrl+2")
 
@@ -113,7 +115,7 @@ func (w *Window) showExample(e example) {
 	}
 	w.config.Flags = e.flags
 	w.fillFlagsMenu()
-	for i, mode := range w.modes {
+	for i, mode := range modes {
 		if mode == e.mode() {
 			w.modeActions[i].SetChecked(true)
 		}

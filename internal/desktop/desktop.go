@@ -16,11 +16,11 @@ import (
 // by which a Wayland desktop matches a window to its entry.
 const Name = "reghead"
 
-// Executable returns the file that starts the program as it is being run: the
+// executable returns the file that starts the program as it is being run: the
 // AppImage it is in, if it is in one, and otherwise the program itself. Inside
 // an AppImage the program is in a folder that is only there while it runs, so
 // the AppImage, which its runtime names in $APPIMAGE, is what starts it again.
-func Executable() (string, error) {
+func executable() (string, error) {
 	if image := os.Getenv("APPIMAGE"); image != "" {
 		return image, nil
 	}
@@ -34,9 +34,9 @@ func Executable() (string, error) {
 	return path, nil
 }
 
-// Dir returns the folder desktop entries of the user's own are kept in:
-// applications in $XDG_DATA_HOME, or in ~/.local/share without it.
-func Dir() (string, error) {
+// dataDir returns the folder the user's own desktop entries and icons are kept
+// under: $XDG_DATA_HOME, or ~/.local/share without it.
+func dataDir() (string, error) {
 	data := os.Getenv("XDG_DATA_HOME")
 	if data == "" || !filepath.IsAbs(data) {
 		home, err := os.UserHomeDir()
@@ -48,14 +48,14 @@ func Dir() (string, error) {
 	return data, nil
 }
 
-// Entry returns the desktop entry for a program started by the file at exec.
+// entry returns the desktop entry for a program started by the file at exec.
 // The class is what the program's windows are known by under X11, the name
 // of the program file, so that its windows are matched to the entry. The
 // icon is the path of its image file: a path and not the name of an icon of
 // the theme, which a desktop may not find in a folder it has a stale cache
 // of (as GNOME on Ubuntu 22.04 does), leaving the windows matched to the
 // entry with no icon at all.
-func Entry(exec, class, icon string) string {
+func entry(exec, class, icon string) string {
 	var b strings.Builder
 	b.WriteString("[Desktop Entry]\n")
 	b.WriteString("Type=Application\n")
@@ -96,11 +96,11 @@ func escape(value string) string {
 // else or under another name, so that the entry always starts the copy last
 // run: an AppImage, or else the program itself.
 func Install(icon []byte) error {
-	exec, err := Executable()
+	exec, err := executable()
 	if err != nil {
 		return err
 	}
-	data, err := Dir()
+	data, err := dataDir()
 	if err != nil {
 		return err
 	}
@@ -110,19 +110,19 @@ func Install(icon []byte) error {
 	if self, err := os.Executable(); err == nil {
 		class = filepath.Base(self)
 	}
-	return Write(data, exec, class, icon)
+	return write(data, exec, class, icon)
 }
 
-// Write writes the desktop entry and the icon, as PNG data, into the data
+// write writes the desktop entry and the icon, as PNG data, into the data
 // folder given: the entry to applications/reghead.desktop and the icon to
 // icons/hicolor/256x256/apps/reghead.png. Each is written only if it is
 // not already so, and in a way that leaves the old file whole if it fails.
-func Write(data, exec, class string, icon []byte) error {
-	entry := filepath.Join(data, "applications", Name+".desktop")
+func write(data, exec, class string, icon []byte) error {
+	entryPath := filepath.Join(data, "applications", Name+".desktop")
 	image := filepath.Join(data, "icons", "hicolor", "256x256", "apps", Name+".png")
 	return errors.Join(
 		writeFile(image, icon),
-		writeFile(entry, []byte(Entry(exec, class, image))),
+		writeFile(entryPath, []byte(entry(exec, class, image))),
 	)
 }
 

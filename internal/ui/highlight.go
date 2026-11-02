@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"runtime"
+	"slices"
 	"strings"
 
 	qt "github.com/mappu/miqt/qt6"
@@ -39,6 +40,7 @@ func (w *Window) paintHighlights(colours syntax) {
 		return
 	}
 	w.paint(colours)
+	w.paintExplanation(colours)
 	w.paintRegex(colours)
 	w.paintReplacement(colours)
 	w.paintRows(colours)
@@ -89,6 +91,24 @@ func explanationHTML(nodes []engine.Node, colours syntax) string {
 	}
 	walk(nodes, 0)
 	return b.String()
+}
+
+// paintExplanation lights up the lines of the explanation in what is hovered.
+func (w *Window) paintExplanation(colours syntax) {
+	var spans []paintedSpan
+	if g := w.hover.group; g >= 0 {
+		document := w.explanation.Document()
+		for i, groups := range explanationLines(w.result.Explanation) {
+			block := document.FindBlockByNumber(i)
+			if block.IsValid() && slices.Contains(groups, g) {
+				// A block's length counts the line break at its end.
+				start := block.Position()
+				spans = append(spans, paintedSpan{engine.Span{Start: start, End: start + block.Length() - 1}, colours.edge(g), colours.hoverText})
+			}
+			runtime.KeepAlive(block)
+		}
+	}
+	highlightUTF16(w.explanation, spans)
 }
 
 // paint colours the matches and their groups in the text, and the replacements
@@ -182,8 +202,24 @@ type paintedSpan struct {
 	background, text string
 }
 
-// highlight colours spans of an editor.
-func highlight(edit *qt.QPlainTextEdit, spans []paintedSpan, offsets *engine.Offsets) {
+// highlighter is a text pane that can colour parts of its text.
+type highlighter interface {
+	TextCursor() *qt.QTextCursor
+	SetExtraSelections([]qt.QTextEdit__ExtraSelection)
+}
+
+// highlight colours spans of an editor, given in bytes of its text.
+func highlight(edit highlighter, spans []paintedSpan, offsets *engine.Offsets) {
+	converted := make([]paintedSpan, len(spans))
+	for i, span := range spans {
+		span.Start, span.End = offsets.UTF16(span.Start), offsets.UTF16(span.End)
+		converted[i] = span
+	}
+	highlightUTF16(edit, converted)
+}
+
+// highlightUTF16 colours spans of an editor, given in Qt's positions.
+func highlightUTF16(edit highlighter, spans []paintedSpan) {
 	formats := map[[2]string]*qt.QTextCharFormat{}
 	for _, span := range spans {
 		key := [2]string{span.background, span.text}
@@ -195,8 +231,8 @@ func highlight(edit *qt.QPlainTextEdit, spans []paintedSpan, offsets *engine.Off
 	for _, span := range spans {
 		format := formats[[2]string{span.background, span.text}]
 		cursor := edit.TextCursor()
-		cursor.SetPosition(offsets.UTF16(span.Start))
-		cursor.SetPosition2(offsets.UTF16(span.End), qt.QTextCursor__KeepAnchor)
+		cursor.SetPosition(span.Start)
+		cursor.SetPosition2(span.End, qt.QTextCursor__KeepAnchor)
 		selection := qt.NewQTextEdit__ExtraSelection2()
 		selection.SetCursor(*cursor)
 		selection.SetFormat(*format)

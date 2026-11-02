@@ -100,6 +100,8 @@ func TestExplain(t *testing.T) {
 		{`(?i)`, "", `(?i)`, "Turn on case-insensitive matching for the rest of the pattern"},
 		{`\x41`, "", `\x41`, `Literally "A"`},
 		{`\pL`, "", `\pL`, "A Unicode letter"},
+		{`\p{Lu}`, "", `\p{Lu}`, "A Unicode upper case letter"},
+		{`\P{Lu}`, "", `\P{Lu}`, "Anything except a Unicode upper case letter"},
 		{`\p{Greek}`, "", `\p{Greek}`, "A character of the Greek script"},
 		{`a|b`, "", `a|b`, "Either of these 2 alternatives"},
 		{`\n`, "", `\n`, "A newline"},

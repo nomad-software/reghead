@@ -13,10 +13,9 @@ import (
 	"github.com/nomad-software/reghead/internal/settings"
 )
 
-// submenuArrowRoom follows the title of a submenu, to keep its arrow clear of it.
-const submenuArrowRoom = "      "
-
 const (
+	// submenuArrowRoom follows the title of a submenu, to keep its arrow clear of it.
+	submenuArrowRoom = "      "
 	// maxShown is how many matches are listed and highlighted, as Qt slows
 	// badly with many more. Substitution always covers them all.
 	maxShown = 5000
@@ -63,7 +62,6 @@ type Window struct {
 	quitAction         *qt.QAction
 	// exampleActions are the menu's actions, in the order of examples.
 	exampleActions []*qt.QAction
-	modes          []string
 	modeActions    []*qt.QAction
 	engineActions  []*qt.QAction
 	flagsButton    *qt.QToolButton

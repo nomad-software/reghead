@@ -9,7 +9,7 @@ import (
 )
 
 func TestEntry(t *testing.T) {
-	entry := Entry("/home/me/bin/reghead", "reghead", "/home/me/.local/share/icons/hicolor/256x256/apps/reghead.png")
+	entry := entry("/home/me/bin/reghead", "reghead", "/home/me/.local/share/icons/hicolor/256x256/apps/reghead.png")
 	for _, line := range []string{
 		"[Desktop Entry]",
 		"Type=Application",
@@ -37,7 +37,7 @@ func TestExecQuoting(t *testing.T) {
 		"/tmp/100%/x":                       "/tmp/100%%/x",
 		`/tmp/back\slash`:                   `"/tmp/back\\\\slash"`,
 	} {
-		entry := Entry(path, "x", "/x.png")
+		entry := entry(path, "x", "/x.png")
 		if !strings.Contains(entry, "\nExec="+want+"\n") {
 			t.Errorf("Exec for %q: want %q in\n%s", path, want, entry)
 		}
@@ -47,15 +47,15 @@ func TestExecQuoting(t *testing.T) {
 func TestExecutable(t *testing.T) {
 	// An AppImage is started again through the AppImage itself.
 	t.Setenv("APPIMAGE", "/home/me/Apps/RegHead-x86_64.AppImage")
-	if got, err := Executable(); err != nil || got != "/home/me/Apps/RegHead-x86_64.AppImage" {
+	if got, err := executable(); err != nil || got != "/home/me/Apps/RegHead-x86_64.AppImage" {
 		t.Errorf("in an AppImage: %q, %v", got, err)
 	}
 
 	// Otherwise it is the program itself, with any links followed.
 	t.Setenv("APPIMAGE", "")
-	got, err := Executable()
+	got, err := executable()
 	if err != nil || !filepath.IsAbs(got) {
-		t.Fatalf("Executable() = %q, %v", got, err)
+		t.Fatalf("executable() = %q, %v", got, err)
 	}
 	if resolved, _ := filepath.EvalSymlinks(got); resolved != got {
 		t.Errorf("links not followed: %q is %q", got, resolved)
@@ -64,13 +64,13 @@ func TestExecutable(t *testing.T) {
 
 func TestDir(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/data/home")
-	if got, err := Dir(); err != nil || got != "/data/home" {
+	if got, err := dataDir(); err != nil || got != "/data/home" {
 		t.Errorf("with XDG_DATA_HOME: %q, %v", got, err)
 	}
 	// A relative one is ignored, as the specification says.
 	t.Setenv("XDG_DATA_HOME", "relative")
 	t.Setenv("HOME", "/home/me")
-	if got, err := Dir(); err != nil || got != "/home/me/.local/share" {
+	if got, err := dataDir(); err != nil || got != "/home/me/.local/share" {
 		t.Errorf("without XDG_DATA_HOME: %q, %v", got, err)
 	}
 }
@@ -80,7 +80,7 @@ func TestWrite(t *testing.T) {
 	entryPath := filepath.Join(data, "applications", "reghead.desktop")
 	iconPath := filepath.Join(data, "icons", "hicolor", "256x256", "apps", "reghead.png")
 
-	if err := Write(data, "/opt/one/reghead", "reghead", []byte("png")); err != nil {
+	if err := write(data, "/opt/one/reghead", "reghead", []byte("png")); err != nil {
 		t.Fatal(err)
 	}
 	entry, err := os.ReadFile(entryPath)
@@ -97,7 +97,7 @@ func TestWrite(t *testing.T) {
 	// The same again leaves the files alone.
 	old := time.Now().Add(-time.Hour)
 	os.Chtimes(entryPath, old, old)
-	if err := Write(data, "/opt/one/reghead", "reghead", []byte("png")); err != nil {
+	if err := write(data, "/opt/one/reghead", "reghead", []byte("png")); err != nil {
 		t.Fatal(err)
 	}
 	if info, _ := os.Stat(entryPath); !info.ModTime().Equal(old) {
@@ -105,7 +105,7 @@ func TestWrite(t *testing.T) {
 	}
 
 	// Run from elsewhere, or under another name, it is rewritten.
-	if err := Write(data, "/home/me/Apps/RegHead.AppImage", "reghead", []byte("png")); err != nil {
+	if err := write(data, "/home/me/Apps/RegHead.AppImage", "reghead", []byte("png")); err != nil {
 		t.Fatal(err)
 	}
 	entry, _ = os.ReadFile(entryPath)

@@ -12,14 +12,14 @@ type goEngine struct{}
 
 func (goEngine) Name() string { return "Go" }
 
-func (goEngine) Flags() []Flag {
-	return []Flag{
-		{"i", "Case Insensitive"},
-		{"m", "Multi-line"},
-		{"s", "Dot Matches Newline"},
-		{"U", "Ungreedy"},
-	}
+var goFlags = []Flag{
+	{"i", "Case Insensitive"},
+	{"m", "Multi-line"},
+	{"s", "Dot Matches Newline"},
+	{"U", "Ungreedy"},
 }
+
+func (goEngine) Flags() []Flag { return goFlags }
 
 func (goEngine) InlineFlags(flags string) string { return goFlagPrefix(flags) }
 
@@ -128,9 +128,9 @@ func (goEngine) Compile(pattern, flags string) (Regex, error) {
 
 func goFlagPrefix(flags string) string {
 	var on strings.Builder
-	for _, f := range "imsU" {
-		if strings.ContainsRune(flags, f) {
-			on.WriteRune(f)
+	for _, f := range goFlags {
+		if strings.Contains(flags, f.Key) {
+			on.WriteString(f.Key)
 		}
 	}
 	if on.Len() == 0 {

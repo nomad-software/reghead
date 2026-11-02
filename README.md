@@ -22,11 +22,10 @@ A desktop regular expression tester, written in Go with a Qt 6 interface using t
 - **Plain language explanation.** A pane breaks the pattern down, step by step,
   exactly as you typed it, with each syntax highlighted fragment followed by
   what it does.
-- **Hover to connect them.** Point at a group in the regex or a reference in the
-  replacement to light it up in the text, the result and the match list, in every
+- **Hover to connect them.** Point at a group in the regex, a reference in the
+  replacement or a line of the explanation to light it up everywhere else, in every
   match. Point at a match in the text or the result, or a row of the list, to light
-  up that match and its group everywhere else. Outside a group it is the whole
-  match.
+  up that match and its group. Outside a group it is the whole match.
 - **Match list.** A pane lists each match and its groups with their positions in
   characters. Click a row to select it in the text. Up to 5,000 matches are
   listed and highlighted; the count and substitution always cover them all.

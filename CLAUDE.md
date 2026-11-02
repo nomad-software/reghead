@@ -70,8 +70,10 @@ the engine package imports Qt, which takes minutes and is not a hang.
   also runs `Explain` on patterns that do not compile, for `Result.Tokens`, which
   highlight the regex field as it is typed, so it must cope with any string.
 - **Hover** (`hover.go`) lights up one `hoverTarget` in the pattern, replacement,
-  text, result and list, in the group's `syntax.edge` colour. A group's place in the pattern comes from
-  `Result.GroupRanges`, which `Evaluate` collects from each `Node.group`. The static
+  text, result, explanation and list, in the group's `syntax.edge` colour. A group's place in the pattern comes from
+  `Result.GroupRanges`, which `Evaluate` collects from each `Node.group`. Each node is
+  one block of the explanation's document, in order, which `explanationLines` relies
+  on. Lines are lit in full, a group's with those nested in it. The static
   regex colours are by token type, so only hover links them to
   match colours.
 - **The regex and replacement fields** (`linefield.go`) are `QPlainTextEdit`s made

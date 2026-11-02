@@ -15,8 +15,8 @@ type syntax struct {
 	// fills holds, for the whole match and then for each group, the background
 	// of odd and even matches.
 	fills [7][2]string
-	// edges holds the strong colour of each, which outlines a dot in
-	// the list of matches, where a pale fill alone would hardly show.
+	// edges holds the strong colour of each, which outlines a dot in the list of
+	// matches, where a pale fill alone would hardly show, and lights up what is hovered.
 	edges [7]string
 	// groups holds the brackets of groups by how deeply they nest.
 	groups                          [5]tokenColour
@@ -85,7 +85,7 @@ func (s syntax) fill(group, match int) string {
 	return s.fills[colourIndex(group, len(s.fills))][match%2]
 }
 
-// edge returns the outline of the dot of a group.
+// edge returns the strong colour of a group.
 func (s syntax) edge(group int) string {
 	return s.edges[colourIndex(group, len(s.edges))]
 }

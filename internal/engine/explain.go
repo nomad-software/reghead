@@ -35,7 +35,7 @@ var goDialect = dialect{
 	dot:     "Any character except a newline", dotAll: "Any character, including a newline",
 	start: "The start of the text", startLine: "The start of a line",
 	end: "The end of the text", endLine: "The end of a line",
-	flagNames: goFlagNames,
+	flagNames: flagNames,
 	quoting:   true, posix: true,
 }
 
@@ -53,7 +53,7 @@ var jsDialect = dialect{
 	dot:     "Any character except a line break", dotAll: "Any character, including a line break",
 	start: "The start of the text", startLine: "The start of a line",
 	end: "The end of the text", endLine: "The end of a line",
-	flagNames:    goFlagNames,
+	flagNames:    flagNames,
 	backtracking: true, js: true,
 }
 
@@ -538,20 +538,16 @@ func times(n string) string {
 	return n + " times"
 }
 
-var pcreFlagNames = map[byte]string{
+var flagNames = map[byte]string{
 	'i': "case-insensitive matching",
 	'm': "multi-line mode (^ and $ match at each line)",
 	's': "dot matching newlines",
-	'x': "extended mode (whitespace and # comments are ignored)",
 	'U': "ungreedy mode (greedy and lazy swap)",
 }
 
-var goFlagNames = map[byte]string{
-	'i': "case-insensitive matching",
-	'm': "multi-line mode (^ and $ match at each line)",
-	's': "dot matching newlines",
-	'U': "ungreedy mode (greedy and lazy swap)",
-}
+var pcreFlagNames = extend(flagNames, map[byte]string{
+	'x': "extended mode (whitespace and # comments are ignored)",
+})
 
 // group explains anything that starts with "(".
 func (p *explainer) group() Node {
@@ -742,7 +738,7 @@ func (p *explainer) applyFlags(flags string) string {
 	return strings.Join(parts, ", ")
 }
 
-var goPosix = map[string]string{
+var posixClasses = map[string]string{
 	"alnum": "a letter or digit", "alpha": "a letter", "ascii": "an ASCII character",
 	"blank": "a space or tab", "cntrl": "a control character", "digit": "a digit",
 	"graph": "a visible character", "lower": "a lower case letter",
@@ -776,7 +772,7 @@ func (p *explainer) class() Node {
 			name, _, closed := strings.Cut(p.rest()[2:], ":]")
 			negated, isNegated := strings.CutPrefix(name, "^")
 			// What is not a known name is plain characters, as in [[:].
-			if text, known := goPosix[negated]; closed && known {
+			if text, known := posixClasses[negated]; closed && known {
 				p.pos += len(name) + 4
 				p.emit(p.pos-len(name)-4, TokenClassMeta)
 				if isNegated {
@@ -960,7 +956,7 @@ func (p *explainer) hex() rune {
 	return rune(n)
 }
 
-var goCategories = map[string]string{
+var unicodeCategories = map[string]string{
 	"L": "a letter", "Lu": "an upper case letter", "Ll": "a lower case letter",
 	"Lt": "a title case letter", "Lm": "a modifier letter", "Lo": "a letter with no case",
 	"M": "a combining mark", "N": "a number", "Nd": "a decimal digit",
@@ -987,13 +983,12 @@ func (p *explainer) unicodeClass(negated bool) string {
 	if rest, ok := strings.CutPrefix(name, "^"); ok {
 		name, negated = rest, !negated
 	}
-	text, ok := goCategories[name]
+	text, ok := unicodeCategories[name]
 	switch {
 	case ok:
-		text = strings.Replace(text, "a", "a Unicode", 1)
-		if strings.HasPrefix(text, "an ") {
-			text = "a Unicode" + text[2:]
-		}
+		// Each starts with "a" or "an", which "Unicode" takes the place of.
+		_, noun, _ := strings.Cut(text, " ")
+		text = "a Unicode " + noun
 	case len(name) <= 2:
 		text = "a character in Unicode category " + name
 	default:

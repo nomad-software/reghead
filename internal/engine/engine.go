@@ -58,6 +58,13 @@ type Node struct {
 	group int
 }
 
+// CaptureGroup returns the number of the capture group it is, or 0 if it is not one.
+func (n Node) CaptureGroup() int { return n.group }
+
+// InPattern says it explains part of the pattern as typed, which flags held apart
+// from it are not.
+func (n Node) InPattern() bool { return !n.synthetic }
+
 // TokenKind is the sort of thing a token of a pattern is.
 type TokenKind int
 

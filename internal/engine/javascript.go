@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -185,6 +186,8 @@ var (
 	wordSet    = []runeRange{{'0', '9'}, {'A', 'Z'}, {'_', '_'}, {'a', 'z'}}
 	spaceSet   = []runeRange{{9, 13}, {' ', ' '}, {0xA0, 0xA0}, {0x1680, 0x1680}, {0x2000, 0x200A}, {0x2028, 0x2029}, {0x202F, 0x202F}, {0x205F, 0x205F}, {0x3000, 0x3000}, {0xFEFF, 0xFEFF}}
 	newlineSet = []runeRange{{10, 10}, {13, 13}, {0x2028, 0x2029}}
+	// notLineBreak is a bracket expression of what is not a line break.
+	notLineBreak = "[" + setBody(complementOf(newlineSet)) + "]"
 )
 
 // complementOf returns the characters a sorted set leaves out.
@@ -200,16 +203,20 @@ func complementOf(set []runeRange) []runeRange {
 	return append(out, runeRange{next, utf8.MaxRune})
 }
 
-// classRune writes a character as it may appear in a bracket expression.
-func classRune(r rune) string {
+// escapedRune writes a character, as a code if it might not survive as itself, and
+// with a backslash if it is one of those that are special where it goes.
+func escapedRune(r rune, special string) string {
 	switch {
 	case r < 0x20 || (r >= 0x7F && r <= 0xFFFF):
 		return fmt.Sprintf(`\u%04X`, r)
-	case strings.ContainsRune(`\]^-[`, r):
+	case strings.ContainsRune(special, r):
 		return `\` + string(r)
 	}
 	return string(r)
 }
+
+// classRune writes a character as it may appear in a bracket expression.
+func classRune(r rune) string { return escapedRune(r, `\]^-[`) }
 
 // setBody writes a set for inside a bracket expression.
 func setBody(set []runeRange) string {
@@ -224,15 +231,7 @@ func setBody(set []runeRange) string {
 }
 
 // literalRune writes a character as it may appear outside a bracket expression.
-func literalRune(r rune) string {
-	switch {
-	case r < 0x20 || (r >= 0x7F && r <= 0xFFFF):
-		return fmt.Sprintf(`\u%04X`, r)
-	case strings.ContainsRune(`\.+*?()|[]{}^$#`, r):
-		return `\` + string(r)
-	}
-	return string(r)
-}
+func literalRune(r rune) string { return escapedRune(r, `\.+*?()|[]{}^$#`) }
 
 // jsScope is the flags in force at a point of a pattern.
 type jsScope struct{ multi, dotAll bool }
@@ -309,10 +308,8 @@ func jsGroups(s string) ([]string, error) {
 			if !jsGroupName.MatchString(name) {
 				return nil, fmt.Errorf("invalid group name %q", name)
 			}
-			for _, other := range names {
-				if other == name {
-					return nil, fmt.Errorf("two groups are named %q", name)
-				}
+			if slices.Contains(names, name) {
+				return nil, fmt.Errorf("two groups are named %q", name)
 			}
 			names = append(names, name)
 		}
@@ -341,7 +338,7 @@ func (t *jsTranslator) step() error {
 		if t.scope.dotAll {
 			t.out.WriteString(`[\s\S]`)
 		} else {
-			t.out.WriteString("[" + setBody(complementOf(newlineSet)) + "]")
+			t.out.WriteString(notLineBreak)
 		}
 		return nil
 	case '^', '$':
@@ -359,14 +356,13 @@ func (t *jsTranslator) step() error {
 // anchor writes ^ or $. JavaScript's $ allows for no final newline, and its lines
 // end in more ways than regexp2's.
 func (t *jsTranslator) anchor(c byte) string {
-	other := "[" + setBody(complementOf(newlineSet)) + "]"
 	switch {
 	case c == '^' && t.scope.multi:
-		return "(?<!" + other + ")"
+		return "(?<!" + notLineBreak + ")"
 	case c == '^':
 		return `\A`
 	case t.scope.multi:
-		return "(?!" + other + ")"
+		return "(?!" + notLineBreak + ")"
 	}
 	return `\z`
 }

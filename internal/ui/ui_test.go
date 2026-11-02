@@ -628,7 +628,7 @@ func TestExamplesMenu(t *testing.T) {
 			if w.config.Mode != e.mode() || w.substitution.IsVisible() != (e.replacement != "") {
 				t.Errorf("%s: mode %q", e.name, w.config.Mode)
 			}
-			for j, mode := range w.modes {
+			for j, mode := range modes {
 				if w.modeActions[j].IsChecked() != (mode == e.mode()) {
 					t.Errorf("%s: menu shows the wrong mode", e.name)
 				}
@@ -776,7 +776,9 @@ func TestRegexFieldSingleLine(t *testing.T) {
 	})
 }
 
-func spanColours(t *testing.T, edit *qt.QPlainTextEdit, colour string) []string {
+func spanColours(t *testing.T, edit interface {
+	ExtraSelections() []qt.QTextEdit__ExtraSelection
+}, colour string) []string {
 	t.Helper()
 	var found []string
 	for _, selection := range edit.ExtraSelections() {
@@ -977,30 +979,104 @@ func TestReplacementHighlighting(t *testing.T) {
 	})
 }
 
+// The explanation lights up with the rest, and lights them up.
+func TestHoverExplanation(t *testing.T) {
+	s := settings.Default()
+	s.Pattern, s.Text, s.Flags = `x(a(b))c`, "xabc", "gi"
+	s.Theme = settings.ThemeLight
+	w, _ := open(t, s)
+	colours := syntaxFor(false)
+	mainthread.Wait(func() {
+		// Its lines are the flags, x, the outer group, a, the inner group, b and c.
+		document := w.explanation.Document()
+		lines := explanationLines(w.result.Explanation)
+		if len(lines) != 7 || document.BlockCount() != len(lines) {
+			t.Fatalf("lines %v, %d blocks: %q", lines, document.BlockCount(), w.explanation.ToPlainText())
+		}
+		lineAt := func(n int) int {
+			block := document.FindBlockByNumber(n)
+			return block.Position()
+		}
+		lit := func(colour string) int { return len(spanColours(t, w.explanation, colour)) }
+
+		// A group lights up its own lines, and those of what is nested in it.
+		w.hoverPatternAt(2) // The "a".
+		if got := lit(colours.edge(1)); got != 4 {
+			t.Errorf("%d lines lit for group 1", got)
+		}
+		w.hoverPatternAt(4) // The "b".
+		if got := lit(colours.edge(2)); got != 2 {
+			t.Errorf("%d lines lit for group 2", got)
+		}
+		// All of the pattern is the whole match, but not the flags held apart from it.
+		w.hoverPatternAt(0)
+		if got := lit(colours.edge(0)); got != 6 {
+			t.Errorf("%d lines lit for the whole match", got)
+		}
+
+		// A line lights up its innermost group everywhere else.
+		w.hoverExplanationAt(lineAt(3)) // The "a", in the outer group.
+		if w.hover != (hoverTarget{allMatches, 1}) {
+			t.Errorf("hover %+v", w.hover)
+		}
+		if got := spanColours(t, w.text, colours.edge(1)); !slices.Equal(got, []string{"ab"}) {
+			t.Errorf("text %q", got)
+		}
+		if got := spanColours(t, w.regex.QPlainTextEdit, colours.edge(1)); !slices.Equal(got, []string{"(a(b))"}) {
+			t.Errorf("pattern %q", got)
+		}
+		w.hoverExplanationAt(lineAt(5)) // The "b", in the inner group.
+		if w.hover != (hoverTarget{allMatches, 2}) {
+			t.Errorf("hover %+v", w.hover)
+		}
+		w.hoverExplanationAt(lineAt(6)) // The "c", in no group.
+		if w.hover != (hoverTarget{allMatches, 0}) {
+			t.Errorf("hover %+v", w.hover)
+		}
+		w.hoverExplanationAt(lineAt(0)) // The flags, not in the pattern.
+		if w.hover != noHover {
+			t.Errorf("hover %+v", w.hover)
+		}
+		if got := len(w.explanation.ExtraSelections()); got != 0 {
+			t.Errorf("%d lines stay lit", got)
+		}
+		w.Close()
+	})
+}
+
 // A real movement of the mouse reaches the hover.
 func TestHoverByMouse(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Text, s.Flags = `(a)`, "a", "g"
 	w, _ := open(t, s)
 	mainthread.Wait(func() {
-		move := func(edit *qt.QPlainTextEdit, x, y float64) {
+		move := func(viewport *qt.QWidget, x, y float64) {
 			point := qt.NewQPointF3(x, y)
 			event := qt.NewQMouseEvent(qt.QEvent__MouseMove, point, qt.NoButton, qt.NoButton, qt.NoModifier)
-			qt.QCoreApplication_SendEvent(edit.Viewport().QObject, event.QEvent)
+			qt.QCoreApplication_SendEvent(viewport.QObject, event.QEvent)
 			event.Delete()
 			point.Delete()
 		}
 		cursor := w.regex.TextCursor()
 		cursor.SetPosition(1)
 		at := w.regex.CursorRect(cursor)
-		move(w.regex.QPlainTextEdit, float64(at.Left()+2), float64(at.Top()+at.Height()/2))
+		move(w.regex.Viewport(), float64(at.Left()+2), float64(at.Top()+at.Height()/2))
 		if got := w.hover; got != (hoverTarget{allMatches, 1}) {
 			t.Errorf("over the group: %+v", got)
 		}
 		// Far past the end of the text is over no character.
-		move(w.regex.QPlainTextEdit, float64(at.Left()+300), float64(at.Top()+at.Height()/2))
+		move(w.regex.Viewport(), float64(at.Left()+300), float64(at.Top()+at.Height()/2))
 		if w.hover != noHover {
 			t.Errorf("past the end: %+v", w.hover)
+		}
+		// The explanation follows the mouse too.
+		block := w.explanation.Document().FindBlockByNumber(0)
+		cursor = w.explanation.TextCursor()
+		cursor.SetPosition(block.Position() + 1)
+		at = w.explanation.CursorRect(cursor)
+		move(w.explanation.Viewport(), float64(at.Left()+2), float64(at.Top()+at.Height()/2))
+		if got := w.hover; got != (hoverTarget{allMatches, 1}) {
+			t.Errorf("over the explanation: %+v", got)
 		}
 		w.Close()
 	})
