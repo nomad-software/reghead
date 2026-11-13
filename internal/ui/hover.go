@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"runtime"
 	"slices"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/nomad-software/qute/qtcore"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
 
 	"github.com/nomad-software/reghead/internal/engine"
 )
@@ -24,22 +25,18 @@ var noHover = hoverTarget{match: allMatches, group: -1}
 // watchHover has the fields, the text, the result, the explanation and the list
 // report what the mouse is over.
 func (w *Window) watchHover() {
-	watchEditor(w, w.regex.QPlainTextEdit, w.hoverPatternAt)
+	watchEditor(w, w.regex, w.hoverPatternAt)
 	watchEditor(w, w.text, w.hoverTextAt)
-	watchEditor(w, w.replacement.QPlainTextEdit, w.hoverReplacementAt)
+	watchEditor(w, w.replacement, w.hoverReplacementAt)
 	watchEditor(w, w.output, w.hoverOutputAt)
 	watchEditor(w, w.explanation, w.hoverExplanationAt)
 
 	w.matches.Viewport().SetMouseTracking(true)
-	w.matches.OnMouseMoveEvent(func(super func(*qt.QMouseEvent), e *qt.QMouseEvent) {
+	w.matches.OverrideMouseMoveEvent(func(super func(*qtgui.QMouseEvent), e *qtgui.QMouseEvent) {
 		super(e)
-		position := e.Position()
-		point := position.ToPoint()
-		w.hoverRow(w.matches.ItemAt(point))
-		runtime.KeepAlive(position)
-		runtime.KeepAlive(point)
+		w.hoverRow(w.matches.ItemAt(e.Position().ToPoint()))
 	})
-	w.matches.OnLeaveEvent(func(super func(*qt.QEvent), e *qt.QEvent) {
+	w.matches.OverrideLeaveEvent(func(super func(*qtcore.QEvent), e *qtcore.QEvent) {
 		super(e)
 		w.setHover(noHover)
 	})
@@ -47,26 +44,22 @@ func (w *Window) watchHover() {
 
 // hoverEditor is a text pane the mouse can be followed over.
 type hoverEditor interface {
-	Viewport() *qt.QWidget
-	OnMouseMoveEvent(func(super func(*qt.QMouseEvent), e *qt.QMouseEvent))
-	OnLeaveEvent(func(super func(*qt.QEvent), e *qt.QEvent))
-	CursorForPosition(*qt.QPoint) *qt.QTextCursor
-	CursorRect(*qt.QTextCursor) *qt.QRect
+	Viewport() *qtwidgets.QWidget
+	OverrideMouseMoveEvent(func(super func(*qtgui.QMouseEvent), e *qtgui.QMouseEvent))
+	OverrideLeaveEvent(func(super func(*qtcore.QEvent), e *qtcore.QEvent))
+	CursorForPosition(qtcore.QPoint) *qtgui.QTextCursor
+	CursorRectWithTextCursor(*qtgui.QTextCursor) qtcore.QRect
 }
 
 // watchEditor calls hover with the position of the character under the mouse, or
 // -1 if it is over none.
 func watchEditor(w *Window, edit hoverEditor, hover func(position int)) {
 	edit.Viewport().SetMouseTracking(true)
-	edit.OnMouseMoveEvent(func(super func(*qt.QMouseEvent), e *qt.QMouseEvent) {
+	edit.OverrideMouseMoveEvent(func(super func(*qtgui.QMouseEvent), e *qtgui.QMouseEvent) {
 		super(e)
-		position := e.Position()
-		point := position.ToPoint()
-		hover(characterAt(edit, point))
-		runtime.KeepAlive(position)
-		runtime.KeepAlive(point)
+		hover(characterAt(edit, e.Position().ToPoint()))
 	})
-	edit.OnLeaveEvent(func(super func(*qt.QEvent), e *qt.QEvent) {
+	edit.OverrideLeaveEvent(func(super func(*qtcore.QEvent), e *qtcore.QEvent) {
 		super(e)
 		w.setHover(noHover)
 	})
@@ -75,20 +68,17 @@ func watchEditor(w *Window, edit hoverEditor, hover func(position int)) {
 // characterAt returns the position of the character at a point of an editor, or
 // -1 if there is none there. The nearest place for a cursor can be on either side
 // of the character.
-func characterAt(edit hoverEditor, point *qt.QPoint) int {
+func characterAt(edit hoverEditor, point qtcore.QPoint) int {
 	cursor := edit.CursorForPosition(point)
-	rect := edit.CursorRect(cursor)
-	defer runtime.KeepAlive(cursor)
-	defer runtime.KeepAlive(rect)
-	if point.Y() < rect.Top() || point.Y() > rect.Bottom() {
+	rect := edit.CursorRectWithTextCursor(cursor)
+	if point.Y < rect.Top() || point.Y > rect.Bottom() {
 		return -1
 	}
 	position := cursor.Position()
-	if point.X() < rect.Left() {
+	if point.X < rect.Left() {
 		position--
 	}
 	block := cursor.Block()
-	defer runtime.KeepAlive(block)
 	// A block's length counts the line break at its end.
 	if position < block.Position() || position >= block.Position()+block.Length()-1 {
 		return -1
@@ -225,7 +215,6 @@ func (w *Window) hoverExplanationAt(position int) {
 		return
 	}
 	block := w.explanation.Document().FindBlock(position)
-	defer runtime.KeepAlive(block)
 	lines := explanationLines(w.result.Explanation)
 	if n := block.BlockNumber(); n >= 0 && n < len(lines) && len(lines[n]) > 0 {
 		w.setHover(hoverTarget{allMatches, lines[n][len(lines[n])-1]})
@@ -235,7 +224,7 @@ func (w *Window) hoverExplanationAt(position int) {
 }
 
 // hoverRow lights up what a row of the list stands for.
-func (w *Window) hoverRow(item *qt.QTreeWidgetItem) {
+func (w *Window) hoverRow(item *qtwidgets.QTreeWidgetItem) {
 	if !w.usable() || item == nil {
 		w.setHover(noHover)
 		return
@@ -265,8 +254,7 @@ func (w *Window) hovered(match, group int) bool {
 // paintRows lights up the rows of what is hovered, and returns those lit up before
 // to how they were.
 func (w *Window) paintRows(colours syntax) {
-	plain := qt.NewQBrush()
-	defer plain.Delete()
+	plain := qtgui.NewQBrush()
 	for _, row := range w.litRows {
 		for column := range matchColumns {
 			row.SetBackground(column, plain)
@@ -287,13 +275,10 @@ func (w *Window) paintRows(colours syntax) {
 		if w.hover.group > 0 {
 			row = row.Child(w.hover.group - 1)
 		}
-		colour := qt.NewQColor6(colours.fill(w.hover.group, i))
-		brush := qt.NewQBrush3(colour)
+		brush := qtgui.NewQBrushWithColor(colour(colours.fill(w.hover.group, i)))
 		for column := range matchColumns {
 			row.SetBackground(column, brush)
 		}
-		brush.Delete()
-		colour.Delete()
 		w.litRows = append(w.litRows, row)
 	}
 }

@@ -8,24 +8,23 @@ import (
 	"testing"
 	"time"
 
-	qt "github.com/mappu/miqt/qt6"
-	"github.com/mappu/miqt/qt6/mainthread"
+	"github.com/nomad-software/qute/qtcore"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
+	"github.com/nomad-software/qute/qutetest"
 
 	"github.com/nomad-software/reghead/internal/engine"
 	"github.com/nomad-software/reghead/internal/settings"
 )
 
-func TestMain(m *testing.M) {
-	os.Setenv("QT_QPA_PLATFORM", "offscreen")
-	qt.NewQApplication(os.Args[:1])
-	qt.QGuiApplication_SetQuitOnLastWindowClosed(false)
-	code := 0
-	go func() {
-		code = m.Run()
-		mainthread.Start(qt.QCoreApplication_Quit)
-	}()
-	qt.QApplication_Exec()
-	os.Exit(code)
+func TestMain(m *testing.M) { qutetest.TestMain(m) }
+
+// onUI runs f on the UI's thread and returns what it gives.
+func onUI[T any](t *testing.T, f func() T) T {
+	t.Helper()
+	var v T
+	qutetest.Run(t, func() { v = f() })
+	return v
 }
 
 func open(t *testing.T, s settings.Settings) (*Window, string) {
@@ -34,7 +33,7 @@ func open(t *testing.T, s settings.Settings) (*Window, string) {
 	if err := s.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	w := mainthread.Wait2(func() *Window {
+	w := onUI(t, func() *Window {
 		w := NewWindow(path)
 		w.Start()
 		return w
@@ -47,9 +46,9 @@ func open(t *testing.T, s settings.Settings) (*Window, string) {
 func settle(t *testing.T, w *Window) {
 	t.Helper()
 	for range 500 {
-		if mainthread.Wait2(func() bool { return !w.running && !w.pending && w.result != nil }) {
+		if onUI(t, func() bool { return !w.running && !w.pending && w.result != nil }) {
 			// One more turn of the event loop, for the layout.
-			mainthread.Wait(func() {})
+			qutetest.Run(t, func() {})
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -58,22 +57,22 @@ func settle(t *testing.T, w *Window) {
 }
 
 // dotColour returns the colour in the middle of a row's dot.
-func dotColour(row *qt.QTreeWidgetItem) string {
-	image := row.Icon(0).PixmapWithExtent(matchDotSize).ToImage()
+func dotColour(row *qtwidgets.QTreeWidgetItem) string {
+	image := row.Icon(0).PixmapExtent(matchDotSize).ToImage()
 	return image.PixelColor(image.Width()/2, image.Height()/2).Name()
 }
 
 // dotAlpha returns how opaque the middle of a row's dot is.
-func dotAlpha(row *qt.QTreeWidgetItem) int {
-	image := row.Icon(0).PixmapWithExtent(matchDotSize).ToImage()
-	return image.PixelColor(image.Width()/2, image.Height()/2).Alpha()
+func dotAlpha(row *qtwidgets.QTreeWidgetItem) int {
+	image := row.Icon(0).PixmapExtent(matchDotSize).ToImage()
+	return int(image.PixelColor(image.Width()/2, image.Height()/2).A)
 }
 
 func TestMatchAndExplain(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Text = `(b)|😀`, "a😀b"
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if n := w.matches.TopLevelItemCount(); n != 2 {
 			t.Errorf("%d matches", n)
 		}
@@ -83,7 +82,7 @@ func TestMatchAndExplain(t *testing.T) {
 		if got := w.StatusBar().CurrentMessage(); got != "" {
 			t.Errorf("status %q", got)
 		}
-		for _, splitter := range []*qt.QSplitter{w.left, w.side, w.outer} {
+		for _, splitter := range []*qtwidgets.QSplitter{w.left, w.side, w.outer} {
 			if got := splitter.HandleWidth(); got != paneHandleWidth {
 				t.Errorf("handle %d wide", got)
 			}
@@ -120,7 +119,7 @@ func TestMatchAndExplain(t *testing.T) {
 		// The row itself has no colour.
 		for column := range 3 {
 			brush := row.Background(column)
-			if brush.Style() != qt.NoBrush {
+			if brush.Style() != qtcore.NoBrush {
 				t.Errorf("column %d has a background", column)
 			}
 		}
@@ -140,7 +139,7 @@ func TestMatchAndExplain(t *testing.T) {
 		w.regex.SetText("(")
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if !strings.Contains(w.errorLabel.Text(), "missing closing )") || w.errorLabel.IsHidden() {
 			t.Errorf("error %q", w.errorLabel.Text())
 		}
@@ -158,7 +157,7 @@ func TestSubstitution(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Text, s.Replacement = `(\w+)@`, "me@ you@", "<$1>"
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if w.substitution.IsVisible() {
 			t.Error("substitution shown in match mode")
 		}
@@ -168,14 +167,14 @@ func TestSubstitution(t *testing.T) {
 		}
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.output.ToPlainText(); got != "<me> <you>" {
 			t.Errorf("output %q", got)
 		}
 		w.replacement.SetText("[$1]")
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.output.ToPlainText(); got != "[me] [you]" {
 			t.Errorf("output %q", got)
 		}
@@ -189,7 +188,7 @@ func TestSettingsSaved(t *testing.T) {
 	s.Width, s.Height = 1000, 700
 	s.Mode = settings.ModeSubstitute
 	w, path := open(t, s)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.outer.SetSizes([]int{650, 330})
 		w.side.SetSizes([]int{200, 400})
 		w.left.SetSizes([]int{150, 400})
@@ -200,7 +199,7 @@ func TestSettingsSaved(t *testing.T) {
 	})
 	settle(t, w)
 	var side, explain, text int
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		side, explain, text = w.outer.Sizes()[1], w.side.Sizes()[0], w.left.Sizes()[0]
 		applyTheme(settings.ThemeDark)
 		w.config.Theme = settings.ThemeDark
@@ -218,7 +217,7 @@ func TestSettingsSaved(t *testing.T) {
 	}
 
 	again, _ := open(t, got)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if s := again.outer.Sizes()[1]; s != side {
 			t.Errorf("side width %d, want %d", s, side)
 		}
@@ -244,12 +243,11 @@ func TestThemes(t *testing.T) {
 		{settings.ThemeDark, "#1e1e1e", "#ff7b7b"},
 		{settings.ThemeLight, "#ffffff", "#c62828"},
 	} {
-		mainthread.Wait(func() { applyTheme(c.theme) })
+		qutetest.Run(t, func() { applyTheme(c.theme) })
 		// The window hears of the new palette through the event loop.
-		mainthread.Wait(func() {})
-		mainthread.Wait(func() {
-			palette := qt.QGuiApplication_Palette()
-			if got := palette.ColorWithCr(qt.QPalette__Base).Name(); got != c.base {
+		qutetest.Run(t, func() {})
+		qutetest.Run(t, func() {
+			if got := qtgui.QGuiApplicationPalette().Color(qtgui.QPaletteBase).Name(); got != c.base {
 				t.Errorf("%s base %s", c.theme, got)
 			}
 			if got := w.errorLabel.StyleSheet(); !strings.Contains(got, c.errorColour) {
@@ -257,7 +255,7 @@ func TestThemes(t *testing.T) {
 			}
 		})
 	}
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		applyTheme("")
 		w.Close()
 	})
@@ -267,7 +265,7 @@ func TestFlags(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Text, s.Flags = "(?s)A", "aa", "g"
 	w, path := open(t, s)
-	action := func(key string) *qt.QAction {
+	action := func(key string) *qtgui.QAction {
 		for _, a := range w.flagsMenu.Actions() {
 			if strings.HasSuffix(a.Text(), "("+key+")") {
 				return a
@@ -276,7 +274,7 @@ func TestFlags(t *testing.T) {
 		t.Fatalf("no flag %s", key)
 		return nil
 	}
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		// Flags at the start of a saved pattern go to the dropdown.
 		if got := w.regex.Text(); got != "A" {
 			t.Errorf("field %q", got)
@@ -296,7 +294,7 @@ func TestFlags(t *testing.T) {
 		}
 		// The copy button gives the regex in full.
 		w.copyButton.Click()
-		if got := qt.QGuiApplication_Clipboard().Text(); got != "(?is)A" {
+		if got := qtgui.QGuiApplicationClipboard().Text(); got != "(?is)A" {
 			t.Errorf("copied %q", got)
 		}
 		if got := w.StatusBar().CurrentMessage(); got != "" {
@@ -304,7 +302,7 @@ func TestFlags(t *testing.T) {
 		}
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if n := w.matches.TopLevelItemCount(); n != 2 {
 			t.Errorf("%d matches with the flag", n)
 		}
@@ -342,7 +340,7 @@ func TestFlags(t *testing.T) {
 		w.regex.SetText("a(?i)b")
 	})
 	settle(t, w)
-	mainthread.Wait(func() { w.Close() })
+	qutetest.Run(t, func() { w.Close() })
 	if got := settings.Load(path).Pattern; got != "a(?i)b" {
 		t.Errorf("saved pattern %q", got)
 	}
@@ -356,7 +354,7 @@ func TestChoosingEngine(t *testing.T) {
 	w, _ := open(t, s)
 	choose := func(name string) {
 		t.Helper()
-		mainthread.Wait(func() {
+		qutetest.Run(t, func() {
 			for i, e := range engine.All() {
 				if e.Name() == name {
 					w.engineActions[i].Trigger()
@@ -376,10 +374,10 @@ func TestChoosingEngine(t *testing.T) {
 		return keys
 	}
 
-	if got := mainthread.Wait2(func() string { return w.engine.Name() }); got != "Go" {
+	if got := onUI(t, func() string { return w.engine.Name() }); got != "Go" {
 		t.Fatalf("engine %q", got)
 	}
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.regexTitle.Text(); got != "Regular Expression (Go)" {
 			t.Errorf("Go title %q", got)
 		}
@@ -389,7 +387,7 @@ func TestChoosingEngine(t *testing.T) {
 	})
 
 	choose("PCRE2")
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.regexTitle.Text(); got != "Regular Expression (PCRE2)" {
 			t.Errorf("PCRE title %q", got)
 		}
@@ -417,7 +415,7 @@ func TestChoosingEngine(t *testing.T) {
 	})
 
 	choose("JavaScript")
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.regexTitle.Text(); got != "Regular Expression (JavaScript)" {
 			t.Errorf("JavaScript title %q", got)
 		}
@@ -437,7 +435,7 @@ func TestChoosingEngine(t *testing.T) {
 		w.regex.SetText("(?i)a")
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		// JavaScript has no such syntax, and the field does not take it as flags.
 		if w.regex.Text() != "(?i)a" || w.errorLabel.IsHidden() {
 			t.Errorf("field %q, error %q", w.regex.Text(), w.errorLabel.Text())
@@ -447,7 +445,7 @@ func TestChoosingEngine(t *testing.T) {
 	settle(t, w)
 
 	choose("Go")
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.inlineFlags.Text(); got != "(?i)" {
 			t.Errorf("Go inline flags %q", got)
 		}
@@ -460,7 +458,7 @@ func TestLoadedFlagsAreOffered(t *testing.T) {
 	s := settings.Default()
 	s.Flags = "gixyU"
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if w.config.Flags != "giU" {
 			t.Errorf("flags %q", w.config.Flags)
 		}
@@ -474,7 +472,7 @@ func TestNoPaintingWhileEvaluating(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Text, s.Flags = "(a)", strings.Repeat("a", 50), "g"
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.hoverPatternAt(1)
 		w.text.SetPlainText("a")
 		if !w.running && !w.pending {
@@ -483,7 +481,7 @@ func TestNoPaintingWhileEvaluating(t *testing.T) {
 		w.setHover(noHover)
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := len(w.text.ExtraSelections()); got != 2 {
 			t.Errorf("%d highlights after the new result", got)
 		}
@@ -493,7 +491,7 @@ func TestNoPaintingWhileEvaluating(t *testing.T) {
 
 func TestSettingsDialog(t *testing.T) {
 	w, path := open(t, settings.Default())
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		d := newSettingsDialog(w)
 		if got := d.tabs.TabText(0); got != "User interface" {
 			t.Errorf("tab %q", got)
@@ -516,7 +514,7 @@ func TestSettingsDialog(t *testing.T) {
 			t.Errorf("cancelled, but theme is %q", w.config.Theme)
 		}
 		d.theme.SetCurrentIndex(2)
-		d.buttons.Accepted()
+		d.buttons.EmitAccepted()
 		if w.config.Theme != settings.ThemeDark {
 			t.Errorf("theme %q", w.config.Theme)
 		}
@@ -525,7 +523,7 @@ func TestSettingsDialog(t *testing.T) {
 	if got := settings.Load(path).Theme; got != settings.ThemeDark {
 		t.Errorf("saved theme %q", got)
 	}
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		applyTheme("")
 		w.Close()
 	})
@@ -536,17 +534,17 @@ func TestGripDots(t *testing.T) {
 	s := settings.Default()
 	s.Mode = settings.ModeSubstitute
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		for _, theme := range []string{settings.ThemeLight, settings.ThemeDark} {
 			applyTheme(theme)
-			for _, splitter := range []*qt.QSplitter{w.left, w.side, w.outer} {
+			for _, splitter := range []*qtwidgets.QSplitter{w.left, w.side, w.outer} {
 				image := splitter.Handle(1).Grab().ToImage()
 				centre := image.PixelColor(image.Width()/2, image.Height()/2)
 				corner := image.PixelColor(0, 0)
 				if centre.Name() == corner.Name() {
 					t.Errorf("%s: no dot at the centre of the handle", theme)
 				}
-				if centre.Red() != centre.Green() || centre.Green() != centre.Blue() {
+				if centre.R != centre.G || centre.G != centre.B {
 					t.Errorf("%s: coloured dot %s", theme, centre.Name())
 				}
 			}
@@ -582,7 +580,7 @@ func TestExamplesByEngine(t *testing.T) {
 		counts[e.engine]++
 	}
 	w, _ := open(t, settings.Default())
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		submenus := w.examplesMenu.Actions()
 		if len(submenus) != len(engine.All()) {
 			t.Fatalf("%d submenus", len(submenus))
@@ -613,9 +611,9 @@ func TestExamplesMenu(t *testing.T) {
 	s.Pattern, s.Text, s.Replacement, s.Flags = "old", "old", "old", "U"
 	w, _ := open(t, s)
 	for i, e := range examples {
-		mainthread.Wait(func() { w.exampleActions[i].Trigger() })
+		qutetest.Run(t, func() { w.exampleActions[i].Trigger() })
 		settle(t, w)
-		mainthread.Wait(func() {
+		qutetest.Run(t, func() {
 			if w.regex.Text() != e.pattern || w.text.ToPlainText() != e.text || w.replacement.Text() != e.replacement {
 				t.Errorf("%s: fields not replaced", e.name)
 			}
@@ -641,18 +639,18 @@ func TestExamplesMenu(t *testing.T) {
 			}
 		})
 	}
-	mainthread.Wait(func() { w.Close() })
+	qutetest.Run(t, func() { w.Close() })
 }
 
 // Quitting from the menu keeps what was entered.
 func TestQuitSaves(t *testing.T) {
 	w, path := open(t, settings.Default())
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.regex.SetText("kept")
 		w.text.SetPlainText("kept text")
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.quitAction.Trigger()
 	})
 	if got := settings.Load(path); got.Pattern != "kept" || got.Text != "kept text" {
@@ -663,7 +661,7 @@ func TestQuitSaves(t *testing.T) {
 // What is entered is saved soon after, with no need for the window to close.
 func TestAutosave(t *testing.T) {
 	w, path := open(t, settings.Default())
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.regex.SetText("typed")
 		w.text.SetPlainText("typed text")
 		w.replacement.SetText("typed replacement")
@@ -690,11 +688,11 @@ func TestAutosave(t *testing.T) {
 	if !saved() {
 		t.Error("not saved after the delay")
 	}
-	mainthread.Wait(func() { w.Close() })
+	qutetest.Run(t, func() { w.Close() })
 
 	// It all comes back, with the engine chosen in the menu and its title.
 	again, _ := open(t, settings.Load(path))
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := again.engine.Name(); got != "JavaScript" {
 			t.Errorf("engine %q", got)
 		}
@@ -718,7 +716,7 @@ func TestRegexHighlighting(t *testing.T) {
 	s.Pattern, s.Flags = `(é\d)+`, "gi"
 	w, _ := open(t, s)
 	colours := syntaxFor(false)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		selections := w.regex.ExtraSelections()
 		// Brackets, the escape and the quantifier; the literal is left plain.
 		if len(selections) != 4 {
@@ -737,7 +735,7 @@ func TestRegexHighlighting(t *testing.T) {
 		w.regex.SetText(`(\d`)
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := len(w.regex.ExtraSelections()); got != 2 {
 			t.Errorf("%d highlighted in an invalid pattern", got)
 		}
@@ -750,15 +748,13 @@ func TestRegexFieldSingleLine(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Flags = "", "i"
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
-		qt.QGuiApplication_Clipboard().SetText("a\nb\r\nc")
+	qutetest.Run(t, func() {
+		qtgui.QGuiApplicationClipboard().SetText("a\nb\r\nc")
 		w.regex.Paste()
 		if got := w.regex.Text(); got != "abc" {
 			t.Errorf("pasted %q", got)
 		}
-		enter := qt.NewQKeyEvent(qt.QEvent__KeyPress, int(qt.Key_Return), qt.NoModifier)
-		qt.QCoreApplication_SendEvent(w.regex.QObject, enter.QEvent)
-		enter.Delete()
+		qtcore.QCoreApplicationSendEvent(w.regex, qtgui.NewQKeyEvent(qtcore.QEventKeyPress, int(qtcore.Key_Return), qtcore.NoModifier))
 		if got := w.regex.Text(); got != "abc" {
 			t.Errorf("after Enter %q", got)
 		}
@@ -777,7 +773,7 @@ func TestRegexFieldSingleLine(t *testing.T) {
 }
 
 func spanColours(t *testing.T, edit interface {
-	ExtraSelections() []qt.QTextEdit__ExtraSelection
+	ExtraSelections() []*qtwidgets.QTextEditExtraSelection
 }, colour string) []string {
 	t.Helper()
 	var found []string
@@ -799,7 +795,7 @@ func TestHover(t *testing.T) {
 	w, _ := open(t, s)
 	colours := syntaxFor(false)
 	// A group in the pattern lights it up, in every match and in the list.
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.hoverPatternAt(2) // The "a".
 		if got := w.hover; got != (hoverTarget{allMatches, 1}) {
 			t.Fatalf("hover %+v", got)
@@ -807,11 +803,11 @@ func TestHover(t *testing.T) {
 		if got := spanColours(t, w.text, colours.edge(1)); !slices.Equal(got, []string{"a", "a"}) {
 			t.Errorf("text %q", got)
 		}
-		if got := spanColours(t, w.regex.QPlainTextEdit, colours.edge(1)); !slices.Equal(got, []string{"(a)"}) {
+		if got := spanColours(t, w.regex, colours.edge(1)); !slices.Equal(got, []string{"(a)"}) {
 			t.Errorf("pattern %q", got)
 		}
 		brush := w.matches.TopLevelItem(1).Child(0).Background(0)
-		if got := brush.Color().Name(); brush.Style() == qt.NoBrush || got != colours.fill(1, 1) {
+		if got := brush.Color().Name(); brush.Style() == qtcore.NoBrush || got != colours.fill(1, 1) {
 			t.Errorf("row %s", got)
 		}
 		// A group that took no part in a match is not lit up in that match.
@@ -821,7 +817,7 @@ func TestHover(t *testing.T) {
 		}
 		for i, want := range []bool{false, true} {
 			brush := w.matches.TopLevelItem(i).Child(1).Background(0)
-			if lit := brush.Style() != qt.NoBrush; lit != want {
+			if lit := brush.Style() != qtcore.NoBrush; lit != want {
 				t.Errorf("optional group's row in match %d: lit %v", i+1, lit)
 			}
 		}
@@ -838,7 +834,7 @@ func TestHover(t *testing.T) {
 		if got := spanColours(t, w.text, colours.edge(1)); len(got) != 1 {
 			t.Errorf("text %q", got)
 		}
-		if got := spanColours(t, w.regex.QPlainTextEdit, colours.edge(1)); !slices.Equal(got, []string{"(a)"}) {
+		if got := spanColours(t, w.regex, colours.edge(1)); !slices.Equal(got, []string{"(a)"}) {
 			t.Errorf("pattern %q", got)
 		}
 		w.hoverTextAt(2) // The space between the matches.
@@ -860,7 +856,7 @@ func TestHover(t *testing.T) {
 		}
 		for i := range 2 {
 			brush := w.matches.TopLevelItem(i).Child(0).Background(0)
-			if brush.Style() != qt.NoBrush {
+			if brush.Style() != qtcore.NoBrush {
 				t.Errorf("row %d stays lit", i)
 			}
 		}
@@ -869,15 +865,15 @@ func TestHover(t *testing.T) {
 		w.regex.SetText("a")
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if w.hover != noHover {
 			t.Errorf("hover after a change %+v", w.hover)
 		}
 		w.hoverPatternAt(0)
 		applyTheme(settings.ThemeDark)
 	})
-	mainthread.Wait(func() {})
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {})
+	qutetest.Run(t, func() {
 		w.setHover(noHover)
 		applyTheme("")
 		w.Close()
@@ -890,15 +886,15 @@ func TestReplacementHighlighting(t *testing.T) {
 	s.Pattern, s.Text, s.Flags, s.Replacement = `(?P<a>\d)-(\d)`, "1-2 3-4", "g", "${a}/$2$$"
 	w, _ := open(t, s)
 	colours := syntaxFor(false)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		if got := w.output.ToPlainText(); got != "1/2$ 3/4$" {
 			t.Fatalf("output %q", got)
 		}
 		// References and escapes are highlighted, and the rest left plain.
-		if got := spanColours(t, w.replacement.QPlainTextEdit, colours.groups[0].background); !slices.Equal(got, []string{"${a}", "$2"}) {
+		if got := spanColours(t, w.replacement, colours.groups[0].background); !slices.Equal(got, []string{"${a}", "$2"}) {
 			t.Errorf("references %q", got)
 		}
-		if got := spanColours(t, w.replacement.QPlainTextEdit, colours.escaped.background); !slices.Equal(got, []string{"$$"}) {
+		if got := spanColours(t, w.replacement, colours.escaped.background); !slices.Equal(got, []string{"$$"}) {
 			t.Errorf("escapes %q", got)
 		}
 		// The result has the colours of the text, match by match.
@@ -917,7 +913,7 @@ func TestReplacementHighlighting(t *testing.T) {
 		if w.hover != (hoverTarget{allMatches, 2}) {
 			t.Fatalf("hover %+v", w.hover)
 		}
-		if got := spanColours(t, w.replacement.QPlainTextEdit, colours.edge(2)); !slices.Equal(got, []string{"$2"}) {
+		if got := spanColours(t, w.replacement, colours.edge(2)); !slices.Equal(got, []string{"$2"}) {
 			t.Errorf("reference %q", got)
 		}
 		if got := spanColours(t, w.output, colours.edge(2)); !slices.Equal(got, []string{"2", "4"}) {
@@ -926,7 +922,7 @@ func TestReplacementHighlighting(t *testing.T) {
 		if got := spanColours(t, w.text, colours.edge(2)); !slices.Equal(got, []string{"2", "4"}) {
 			t.Errorf("text %q", got)
 		}
-		if got := spanColours(t, w.regex.QPlainTextEdit, colours.edge(2)); !slices.Equal(got, []string{`(\d)`}) {
+		if got := spanColours(t, w.regex, colours.edge(2)); !slices.Equal(got, []string{`(\d)`}) {
 			t.Errorf("pattern %q", got)
 		}
 		// Literal parts stand for the whole match.
@@ -934,7 +930,7 @@ func TestReplacementHighlighting(t *testing.T) {
 		if w.hover != (hoverTarget{allMatches, 0}) {
 			t.Errorf("hover %+v", w.hover)
 		}
-		if got := spanColours(t, w.replacement.QPlainTextEdit, colours.edge(0)); !slices.Equal(got, []string{"${a}/$2$$"}) {
+		if got := spanColours(t, w.replacement, colours.edge(0)); !slices.Equal(got, []string{"${a}/$2$$"}) {
 			t.Errorf("whole replacement %q", got)
 		}
 		// The result lights up its own match alone.
@@ -962,15 +958,13 @@ func TestReplacementHighlighting(t *testing.T) {
 		w.replacement.SetText("$9")
 	})
 	settle(t, w)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		w.hoverReplacementAt(0)
 		if w.hover != noHover {
 			t.Errorf("hover %+v", w.hover)
 		}
 		// Enter does nothing here either.
-		enter := qt.NewQKeyEvent(qt.QEvent__KeyPress, int(qt.Key_Return), qt.NoModifier)
-		qt.QCoreApplication_SendEvent(w.replacement.QObject, enter.QEvent)
-		enter.Delete()
+		qtcore.QCoreApplicationSendEvent(w.replacement, qtgui.NewQKeyEvent(qtcore.QEventKeyPress, int(qtcore.Key_Return), qtcore.NoModifier))
 		if got := w.replacement.Text(); got != "$9" {
 			t.Errorf("after Enter %q", got)
 		}
@@ -986,7 +980,7 @@ func TestHoverExplanation(t *testing.T) {
 	s.Theme = settings.ThemeLight
 	w, _ := open(t, s)
 	colours := syntaxFor(false)
-	mainthread.Wait(func() {
+	qutetest.Run(t, func() {
 		// Its lines are the flags, x, the outer group, a, the inner group, b and c.
 		document := w.explanation.Document()
 		lines := explanationLines(w.result.Explanation)
@@ -1022,7 +1016,7 @@ func TestHoverExplanation(t *testing.T) {
 		if got := spanColours(t, w.text, colours.edge(1)); !slices.Equal(got, []string{"ab"}) {
 			t.Errorf("text %q", got)
 		}
-		if got := spanColours(t, w.regex.QPlainTextEdit, colours.edge(1)); !slices.Equal(got, []string{"(a(b))"}) {
+		if got := spanColours(t, w.regex, colours.edge(1)); !slices.Equal(got, []string{"(a(b))"}) {
 			t.Errorf("pattern %q", got)
 		}
 		w.hoverExplanationAt(lineAt(5)) // The "b", in the inner group.
@@ -1049,23 +1043,20 @@ func TestHoverByMouse(t *testing.T) {
 	s := settings.Default()
 	s.Pattern, s.Text, s.Flags = `(a)`, "a", "g"
 	w, _ := open(t, s)
-	mainthread.Wait(func() {
-		move := func(viewport *qt.QWidget, x, y float64) {
-			point := qt.NewQPointF3(x, y)
-			event := qt.NewQMouseEvent(qt.QEvent__MouseMove, point, qt.NoButton, qt.NoButton, qt.NoModifier)
-			qt.QCoreApplication_SendEvent(viewport.QObject, event.QEvent)
-			event.Delete()
-			point.Delete()
+	qutetest.Run(t, func() {
+		move := func(viewport *qtwidgets.QWidget, x, y float64) {
+			event := qtgui.NewQMouseEvent(qtcore.QEventMouseMove, qtcore.QPointF{X: x, Y: y}, qtcore.QPointF{X: x, Y: y}, qtcore.NoButton, qtcore.NoButton, qtcore.NoModifier)
+			qtcore.QCoreApplicationSendEvent(viewport, event)
 		}
 		cursor := w.regex.TextCursor()
 		cursor.SetPosition(1)
-		at := w.regex.CursorRect(cursor)
-		move(w.regex.Viewport(), float64(at.Left()+2), float64(at.Top()+at.Height()/2))
+		at := w.regex.CursorRectWithTextCursor(cursor)
+		move(w.regex.Viewport(), float64(at.Left()+2), float64(at.Top()+at.Height/2))
 		if got := w.hover; got != (hoverTarget{allMatches, 1}) {
 			t.Errorf("over the group: %+v", got)
 		}
 		// Far past the end of the text is over no character.
-		move(w.regex.Viewport(), float64(at.Left()+300), float64(at.Top()+at.Height()/2))
+		move(w.regex.Viewport(), float64(at.Left()+300), float64(at.Top()+at.Height/2))
 		if w.hover != noHover {
 			t.Errorf("past the end: %+v", w.hover)
 		}
@@ -1073,8 +1064,8 @@ func TestHoverByMouse(t *testing.T) {
 		block := w.explanation.Document().FindBlockByNumber(0)
 		cursor = w.explanation.TextCursor()
 		cursor.SetPosition(block.Position() + 1)
-		at = w.explanation.CursorRect(cursor)
-		move(w.explanation.Viewport(), float64(at.Left()+2), float64(at.Top()+at.Height()/2))
+		at = w.explanation.CursorRectWithTextCursor(cursor)
+		move(w.explanation.Viewport(), float64(at.Left()+2), float64(at.Top()+at.Height/2))
 		if got := w.hover; got != (hoverTarget{allMatches, 1}) {
 			t.Errorf("over the explanation: %+v", got)
 		}
@@ -1093,8 +1084,8 @@ func TestScreenshot(t *testing.T) {
 	s.Flags = "gi"
 	s.Theme = os.Getenv("REGHEAD_THEME")
 	w, _ := open(t, s)
-	if !mainthread.Wait2(func() bool { return w.Grab().Save(path) }) {
-		t.Error("the screenshot was not saved")
+	if err := onUI(t, func() error { return w.Grab().Save(path) }); err != nil {
+		t.Error("the screenshot was not saved:", err)
 	}
-	mainthread.Wait(func() { w.Close() })
+	qutetest.Run(t, func() { w.Close() })
 }

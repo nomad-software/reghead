@@ -3,7 +3,9 @@ package ui
 import (
 	"strings"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/nomad-software/qute/qtcore"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
 
 	"github.com/nomad-software/reghead/internal/engine"
 )
@@ -13,10 +15,10 @@ import (
 func (w *Window) fillFlagsMenu() {
 	w.flagsMenu.Clear()
 	for _, f := range w.allFlags() {
-		a := w.flagsMenu.AddActionWithText(f.Label + " (" + f.Key + ")")
+		a := w.flagsMenu.AddActionText(f.Label + " (" + f.Key + ")")
 		a.SetCheckable(true)
 		a.SetChecked(strings.Contains(w.config.Flags, f.Key))
-		a.OnTriggeredWithChecked(func(on bool) {
+		a.OnTriggered(func(on bool) {
 			w.config.Flags = strings.ReplaceAll(w.config.Flags, f.Key, "")
 			if on {
 				w.config.Flags += f.Key
@@ -59,12 +61,12 @@ func (w *Window) flagsChanged() {
 
 // makeInlineFlags makes the label that sits inside the regex field, before the
 // text. It is apart from the text so that no way of editing can reach it.
-func (w *Window) makeInlineFlags(font *qt.QFont) {
-	w.inlineFlags = qt.NewQLabel(w.regex.QWidget)
+func (w *Window) makeInlineFlags(font *qtgui.QFont) {
+	w.inlineFlags = qtwidgets.NewQLabel(w.regex)
 	w.inlineFlags.SetFont(font)
-	w.inlineFlags.SetTextFormat(qt.PlainText)
-	w.inlineFlags.SetAttribute(qt.WA_TransparentForMouseEvents)
-	w.regex.OnResizeEvent(func(super func(*qt.QResizeEvent), e *qt.QResizeEvent) {
+	w.inlineFlags.SetTextFormat(qtcore.PlainText)
+	w.inlineFlags.SetAttribute(qtcore.WA_TransparentForMouseEvents)
+	w.regex.OverrideResizeEvent(func(super func(*qtgui.QResizeEvent), e *qtgui.QResizeEvent) {
 		super(e)
 		w.placeInlineFlags()
 	})
@@ -81,13 +83,13 @@ func (w *Window) fullPattern() string {
 func (w *Window) placeInlineFlags() {
 	if w.inlineFlags.Text() == "" {
 		w.inlineFlags.Hide()
-		w.regex.SetViewportMargins(0, 0, 0, 0)
+		w.regex.setLeftMargin(0)
 		return
 	}
 	w.inlineFlags.AdjustSize()
 	w.inlineFlags.Move(inlineFlagsLeft, (w.regex.Height()-w.inlineFlags.Height())/2)
 	w.inlineFlags.Show()
-	w.regex.SetViewportMargins(inlineFlagsLeft+w.inlineFlags.Width(), 0, 0, 0)
+	w.regex.setLeftMargin(inlineFlagsLeft + w.inlineFlags.Width())
 }
 
 // takeInlineFlags moves flag settings at the start of a pattern into the flags.

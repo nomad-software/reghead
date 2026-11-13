@@ -1,7 +1,8 @@
 package ui
 
 import (
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
 
 	"github.com/nomad-software/reghead/internal/engine"
 	"github.com/nomad-software/reghead/internal/settings"
@@ -11,41 +12,39 @@ import (
 var modes = []string{settings.ModeMatch, settings.ModeSubstitute}
 
 // radioGroup adds actions to a menu of which one is checked at a time.
-func radioGroup(menu *qt.QMenu, labels []string, checked int, chosen func(i int)) []*qt.QAction {
-	group := qt.NewQActionGroup(menu.QObject)
-	actions := make([]*qt.QAction, len(labels))
+func radioGroup(menu *qtwidgets.QMenu, labels []string, checked int, chosen func(i int)) []*qtgui.QAction {
+	group := qtgui.NewQActionGroup(menu)
+	actions := make([]*qtgui.QAction, len(labels))
 	for i, label := range labels {
-		a := group.AddActionWithText(label)
+		a := group.AddActionText(label)
 		a.SetCheckable(true)
 		a.SetChecked(i == checked)
-		a.OnTriggered(func() { chosen(i) })
-		menu.QWidget.AddAction(a)
+		a.OnTriggered(func(bool) { chosen(i) })
+		menu.AddAction(a)
 		actions[i] = a
 	}
 	return actions
 }
 
 // shortcut gives an action its keys.
-func shortcut(a *qt.QAction, keys string) {
-	seq := qt.NewQKeySequence2(keys)
-	a.SetShortcut(seq)
-	seq.Delete()
+func shortcut(a *qtgui.QAction, keys string) {
+	a.SetShortcut(qtgui.NewQKeySequenceWithKey(keys))
 }
 
 // makeMenus makes the menu bar.
 func (w *Window) makeMenus() {
 	bar := w.MenuBar()
 
-	file := bar.AddMenuWithTitle("&File")
-	preferences := file.AddActionWithText("&Settings...")
+	file := bar.AddMenuTitle("&File")
+	preferences := file.AddActionText("&Settings...")
 	shortcut(preferences, "Ctrl+,")
-	preferences.OnTriggered(w.showSettings)
+	preferences.OnTriggered(func(bool) { w.showSettings() })
 	file.AddSeparator()
-	w.quitAction = file.AddActionWithText("&Quit")
+	w.quitAction = file.AddActionText("&Quit")
 	shortcut(w.quitAction, "Ctrl+Q")
-	w.quitAction.OnTriggered(func() { w.Close() })
+	w.quitAction.OnTriggered(func(bool) { w.Close() })
 
-	mode := bar.AddMenuWithTitle("&Mode")
+	mode := bar.AddMenuTitle("&Mode")
 	checked := 0
 	if w.config.Mode == settings.ModeSubstitute {
 		checked = 1
@@ -63,30 +62,30 @@ func (w *Window) makeMenus() {
 			current = i
 		}
 	}
-	w.engineActions = radioGroup(bar.AddMenuWithTitle("&Engine"), names, current, func(i int) {
+	w.engineActions = radioGroup(bar.AddMenuTitle("&Engine"), names, current, func(i int) {
 		w.setEngine(engines[i])
 		w.regexChanged()
 	})
 
-	w.examplesMenu = bar.AddMenuWithTitle("E&xamples")
-	w.exampleActions = make([]*qt.QAction, len(examples))
+	w.examplesMenu = bar.AddMenuTitle("E&xamples")
+	w.exampleActions = make([]*qtgui.QAction, len(examples))
 	for _, candidate := range engines {
 		// Styles can leave the arrow of a submenu right against its text, so the title
 		// keeps some room for it.
-		submenu := w.examplesMenu.AddMenuWithTitle(candidate.Name() + submenuArrowRoom)
+		submenu := w.examplesMenu.AddMenuTitle(candidate.Name() + submenuArrowRoom)
 		for i, e := range examples {
 			if e.engine == candidate.Name() {
-				action := submenu.AddActionWithText(e.name)
-				action.OnTriggered(func() { w.showExample(e) })
+				action := submenu.AddActionText(e.name)
+				action.OnTriggered(func(bool) { w.showExample(e) })
 				w.exampleActions[i] = action
 			}
 		}
 	}
 
-	help := bar.AddMenuWithTitle("&Help")
-	about := help.AddActionWithText("&About")
+	help := bar.AddMenuTitle("&Help")
+	about := help.AddActionText("&About")
 	shortcut(about, "Ctrl+I")
-	about.OnTriggered(func() { showAbout(w.QWidget) })
+	about.OnTriggered(func(bool) { showAbout(w) })
 }
 
 // regexTitleText returns the title of the regex field, naming the engine in brackets.

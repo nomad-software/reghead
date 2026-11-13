@@ -3,15 +3,14 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"strconv"
 	"strings"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/nomad-software/qute/qtcore"
 )
 
 // pcreEngine is the real PCRE2, through Qt's QRegularExpression, which needs no
-// QApplication and can run away from the UI's thread. Qt always compiles in UTF
+// QApplication and, being reentrant, can run away from the UI's thread. Qt always compiles in UTF
 // mode, so that positions go by character.
 type pcreEngine struct{ flagsApart }
 
@@ -93,23 +92,24 @@ func pcreReference(text string) int {
 }
 
 func (pcreEngine) Compile(pattern, flags string) (Regex, error) {
-	options := qt.QRegularExpression__NoPatternOption
-	for key, option := range map[string]qt.QRegularExpression__PatternOption{
-		"i": qt.QRegularExpression__CaseInsensitiveOption,
-		"m": qt.QRegularExpression__MultilineOption,
-		"s": qt.QRegularExpression__DotMatchesEverythingOption,
-		"x": qt.QRegularExpression__ExtendedPatternSyntaxOption,
-		"U": qt.QRegularExpression__InvertedGreedinessOption,
-		"u": qt.QRegularExpression__UseUnicodePropertiesOption,
+	options := qtcore.QRegularExpressionNoPatternOption
+	for key, option := range map[string]qtcore.QRegularExpressionPatternOption{
+		"i": qtcore.QRegularExpressionCaseInsensitiveOption,
+		"m": qtcore.QRegularExpressionMultilineOption,
+		"s": qtcore.QRegularExpressionDotMatchesEverythingOption,
+		"x": qtcore.QRegularExpressionExtendedPatternSyntaxOption,
+		"U": qtcore.QRegularExpressionInvertedGreedinessOption,
+		"u": qtcore.QRegularExpressionUseUnicodePropertiesOption,
 	} {
 		if strings.Contains(flags, key) {
 			options |= option
 		}
 	}
-	re := qt.NewQRegularExpression4(pattern, options)
-	re.GoGC()
+	re := qtcore.NewQRegularExpressionWithPatternFull(pattern, options)
 	if !re.IsValid() {
-		return nil, fmt.Errorf("%s at position %d", re.ErrorString(), re.PatternErrorOffset())
+		err := fmt.Errorf("%s at position %d", re.ErrorString(), re.PatternErrorOffset())
+		re.Delete()
+		return nil, err
 	}
 	re.Optimize()
 	return pcreRegex{re}, nil
@@ -119,27 +119,32 @@ func (pcreEngine) Explain(pattern, flags string) []Node {
 	return explain(&pcreDialect, pattern, flags)
 }
 
-type pcreRegex struct{ re *qt.QRegularExpression }
+type pcreRegex struct{ re *qtcore.QRegularExpression }
 
 func (p pcreRegex) GroupNames() []string { return p.re.NamedCaptureGroups() }
 
+// Release frees the compiled pattern at once. The garbage collector would only
+// hand it to the UI's thread to free, which without a QApplication, as in the
+// tests, never comes.
+func (p pcreRegex) Release() { p.re.Delete() }
+
 func (p pcreRegex) FindAll(text string, n int) ([]Match, error) {
-	defer runtime.KeepAlive(p.re)
 	offsets := NewOffsets(text)
 	groups := p.re.CaptureCount() + 1
 	var matches []Match
-	add := func(m *qt.QRegularExpressionMatch) {
+	add := func(m *qtcore.QRegularExpressionMatch) {
 		spans := make([]Span, groups)
 		for g := range spans {
 			spans[g] = Span{-1, -1}
-			if start := m.CapturedStartWithNth(g); start >= 0 {
-				spans[g] = Span{offsets.ByteAtUTF16(int(start)), offsets.ByteAtUTF16(int(m.CapturedEndWithNth(g)))}
+			if start := m.CapturedStartFull(g); start >= 0 {
+				spans[g] = Span{offsets.ByteAtUTF16(start), offsets.ByteAtUTF16(m.CapturedEndFull(g))}
 			}
 		}
 		matches = append(matches, Match{spans})
 	}
 	if n == 1 {
 		m := p.re.Match(text)
+		defer m.Delete()
 		if !m.IsValid() {
 			return nil, errPCRELimit
 		}
@@ -148,15 +153,20 @@ func (p pcreRegex) FindAll(text string, n int) ([]Match, error) {
 		}
 		return matches, nil
 	}
-	from := int64(0)
-	for it := p.re.GlobalMatch(text); it.HasNext(); {
+	from := 0
+	it := p.re.GlobalMatch(text)
+	for it.HasNext() {
 		m := it.Next()
 		add(m)
 		from = m.CapturedEnd()
+		m.Delete()
 	}
+	it.Delete()
 	// Qt ends a search that hit PCRE2's limits as if nothing more was found. Asking
 	// again from there tells the two apart, as the answer is then not valid.
-	if !p.re.Match2(text, from).IsValid() {
+	last := p.re.MatchFull(text, from, qtcore.QRegularExpressionNormalMatch, qtcore.QRegularExpressionNoMatchOption)
+	defer last.Delete()
+	if !last.IsValid() {
 		return matches, errPCRELimit
 	}
 	return matches, nil

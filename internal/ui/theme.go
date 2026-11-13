@@ -1,7 +1,8 @@
 package ui
 
 import (
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
 
 	"github.com/nomad-software/reghead/internal/settings"
 )
@@ -22,9 +23,9 @@ var systemStyle string
 // is the desktop's own style and palette, which Qt keeps up to date.
 func applyTheme(name string) {
 	if systemStyle == "" {
-		systemStyle = qt.QApplication_Style().Name()
+		systemStyle = qtwidgets.QApplicationStyle().Name()
 	}
-	var p *qt.QPalette
+	var p *qtgui.QPalette
 	switch name {
 	case settings.ThemeLight:
 		p = makePalette(lightColours)
@@ -32,73 +33,68 @@ func applyTheme(name string) {
 		p = makePalette(darkColours)
 	default:
 		// A palette that sets nothing is the desktop's.
-		p = qt.NewQPalette()
+		p = qtgui.NewQPalette()
 	}
 	if name == "" {
-		qt.QApplication_SetStyleWithStyle(systemStyle)
+		qtwidgets.QApplicationSetStyleName(systemStyle)
 	} else {
-		qt.QApplication_SetStyleWithStyle("Fusion")
+		qtwidgets.QApplicationSetStyleName("Fusion")
 	}
-	qt.QApplication_SetPalette(p)
-	p.Delete()
+	qtwidgets.QApplicationSetPalette(p)
 }
 
 // colours are a theme's palette: by role, and by role when disabled.
 type colours struct {
-	roles, disabled map[qt.QPalette__ColorRole]string
+	roles, disabled map[qtgui.QPaletteColorRole]string
 }
 
 var (
 	lightColours = colours{
-		roles: map[qt.QPalette__ColorRole]string{
-			qt.QPalette__Window: "#efefef", qt.QPalette__WindowText: "#1a1a1a",
-			qt.QPalette__Base: "#ffffff", qt.QPalette__AlternateBase: "#f5f5f5",
-			qt.QPalette__Text: "#1a1a1a", qt.QPalette__PlaceholderText: "#808080",
-			qt.QPalette__Button: "#efefef", qt.QPalette__ButtonText: "#1a1a1a",
-			qt.QPalette__BrightText: "#ffffff", qt.QPalette__ToolTipBase: "#ffffdc",
-			qt.QPalette__ToolTipText: "#1a1a1a", qt.QPalette__Highlight: "#308cc6",
-			qt.QPalette__HighlightedText: "#ffffff", qt.QPalette__Link: "#0b57d0",
-			qt.QPalette__LinkVisited: "#6a1b9a", qt.QPalette__Light: "#ffffff",
-			qt.QPalette__Midlight: "#e3e3e3", qt.QPalette__Mid: "#b8b8b8",
-			qt.QPalette__Dark: "#9f9f9f", qt.QPalette__Shadow: "#767676",
+		roles: map[qtgui.QPaletteColorRole]string{
+			qtgui.QPaletteWindow: "#efefef", qtgui.QPaletteWindowText: "#1a1a1a",
+			qtgui.QPaletteBase: "#ffffff", qtgui.QPaletteAlternateBase: "#f5f5f5",
+			qtgui.QPaletteText: "#1a1a1a", qtgui.QPalettePlaceholderText: "#808080",
+			qtgui.QPaletteButton: "#efefef", qtgui.QPaletteButtonText: "#1a1a1a",
+			qtgui.QPaletteBrightText: "#ffffff", qtgui.QPaletteToolTipBase: "#ffffdc",
+			qtgui.QPaletteToolTipText: "#1a1a1a", qtgui.QPaletteHighlight: "#308cc6",
+			qtgui.QPaletteHighlightedText: "#ffffff", qtgui.QPaletteLink: "#0b57d0",
+			qtgui.QPaletteLinkVisited: "#6a1b9a", qtgui.QPaletteLight: "#ffffff",
+			qtgui.QPaletteMidlight: "#e3e3e3", qtgui.QPaletteMid: "#b8b8b8",
+			qtgui.QPaletteDark: "#9f9f9f", qtgui.QPaletteShadow: "#767676",
 		},
-		disabled: map[qt.QPalette__ColorRole]string{
-			qt.QPalette__WindowText: "#a0a0a0", qt.QPalette__Text: "#a0a0a0",
-			qt.QPalette__ButtonText: "#a0a0a0",
+		disabled: map[qtgui.QPaletteColorRole]string{
+			qtgui.QPaletteWindowText: "#a0a0a0", qtgui.QPaletteText: "#a0a0a0",
+			qtgui.QPaletteButtonText: "#a0a0a0",
 		},
 	}
 	darkColours = colours{
-		roles: map[qt.QPalette__ColorRole]string{
-			qt.QPalette__Window: "#2d2d2d", qt.QPalette__WindowText: "#e6e6e6",
-			qt.QPalette__Base: "#1e1e1e", qt.QPalette__AlternateBase: "#262626",
-			qt.QPalette__Text: "#e6e6e6", qt.QPalette__PlaceholderText: "#8c8c8c",
-			qt.QPalette__Button: "#353535", qt.QPalette__ButtonText: "#e6e6e6",
-			qt.QPalette__BrightText: "#ff6060", qt.QPalette__ToolTipBase: "#353535",
-			qt.QPalette__ToolTipText: "#e6e6e6", qt.QPalette__Highlight: "#2f6fb5",
-			qt.QPalette__HighlightedText: "#ffffff", qt.QPalette__Link: "#6aa9ff",
-			qt.QPalette__LinkVisited: "#b48cff", qt.QPalette__Light: "#4a4a4a",
-			qt.QPalette__Midlight: "#3e3e3e", qt.QPalette__Mid: "#262626",
-			qt.QPalette__Dark: "#1a1a1a", qt.QPalette__Shadow: "#101010",
+		roles: map[qtgui.QPaletteColorRole]string{
+			qtgui.QPaletteWindow: "#2d2d2d", qtgui.QPaletteWindowText: "#e6e6e6",
+			qtgui.QPaletteBase: "#1e1e1e", qtgui.QPaletteAlternateBase: "#262626",
+			qtgui.QPaletteText: "#e6e6e6", qtgui.QPalettePlaceholderText: "#8c8c8c",
+			qtgui.QPaletteButton: "#353535", qtgui.QPaletteButtonText: "#e6e6e6",
+			qtgui.QPaletteBrightText: "#ff6060", qtgui.QPaletteToolTipBase: "#353535",
+			qtgui.QPaletteToolTipText: "#e6e6e6", qtgui.QPaletteHighlight: "#2f6fb5",
+			qtgui.QPaletteHighlightedText: "#ffffff", qtgui.QPaletteLink: "#6aa9ff",
+			qtgui.QPaletteLinkVisited: "#b48cff", qtgui.QPaletteLight: "#4a4a4a",
+			qtgui.QPaletteMidlight: "#3e3e3e", qtgui.QPaletteMid: "#262626",
+			qtgui.QPaletteDark: "#1a1a1a", qtgui.QPaletteShadow: "#101010",
 		},
-		disabled: map[qt.QPalette__ColorRole]string{
-			qt.QPalette__WindowText: "#7a7a7a", qt.QPalette__Text: "#7a7a7a",
-			qt.QPalette__ButtonText: "#7a7a7a",
+		disabled: map[qtgui.QPaletteColorRole]string{
+			qtgui.QPaletteWindowText: "#7a7a7a", qtgui.QPaletteText: "#7a7a7a",
+			qtgui.QPaletteButtonText: "#7a7a7a",
 		},
 	}
 )
 
 // makePalette returns the palette of the colours.
-func makePalette(cs colours) *qt.QPalette {
-	p := qt.NewQPalette()
-	for role, colour := range cs.roles {
-		c := qt.NewQColor6(colour)
-		p.SetColor2(role, c)
-		c.Delete()
+func makePalette(cs colours) *qtgui.QPalette {
+	p := qtgui.NewQPalette()
+	for role, name := range cs.roles {
+		p.SetColor(role, colour(name))
 	}
-	for role, colour := range cs.disabled {
-		c := qt.NewQColor6(colour)
-		p.SetColor(qt.QPalette__Disabled, role, c)
-		c.Delete()
+	for role, name := range cs.disabled {
+		p.SetGroupColor(qtgui.QPaletteDisabled, role, colour(name))
 	}
 	return p
 }

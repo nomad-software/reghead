@@ -1,10 +1,12 @@
 #!/bin/sh
 # Builds RegHead and packs it, with the Qt libraries it needs, into an
 # AppImage: one file that runs on most Linux systems without installing
-# anything. The result is build/RegHead-<version>-x86_64.AppImage.
+# anything. The result is RegHead-<version>-x86_64.AppImage, in the root of the
+# project. What it is made from is put together in /tmp/reghead-build (or
+# BUILD, if set), which is kept, so that the tools are fetched only once.
 #
 # It is meant to be run on an old distribution (the GitHub workflow uses
-# Ubuntu 22.04, with Qt's own build of Qt), as an AppImage runs on systems as
+# Ubuntu 22.04, with Qt's own build of Qt 6.12, which the bindings need), as an AppImage runs on systems as
 # new as the one it was built on or newer, not on older ones. It needs Go, a
 # C++ compiler, pkg-config, the Qt 6 development files with qmake, curl and
 # file. The Qt that pkg-config finds is the one built with, and QMAKE, if
@@ -15,7 +17,8 @@ cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"
 ARCH=x86_64
-BUILD=build
+ROOT="$PWD"
+BUILD="${BUILD:-/tmp/reghead-build}"
 APPDIR="$BUILD/AppDir"
 TOOLS="$BUILD/tools"
 OUTPUT="RegHead-$VERSION-$ARCH.AppImage"
@@ -60,7 +63,7 @@ export QMAKE="${QMAKE:-$(command -v qmake6 || command -v qmake)}"
 # GitHub workflow uses, has no others.
 PLUGINS="$("$QMAKE" -query QT_INSTALL_PLUGINS)"
 if [ -n "$(find "$PLUGINS" -mindepth 2 -maxdepth 2 -name '*.so' ! -name 'lib*' | head -n 1)" ]; then
-	STAGE="$PWD/$BUILD/qt-plugins"
+	STAGE="$BUILD/qt-plugins"
 	rm -rf "$STAGE"
 	for dir in "$PLUGINS"/*/; do
 		name="$(basename "$dir")"
@@ -71,7 +74,7 @@ if [ -n "$(find "$PLUGINS" -mindepth 2 -maxdepth 2 -name '*.so' ! -name 'lib*' |
 	done
 
 	REAL_QMAKE="$QMAKE"
-	QMAKE="$PWD/$TOOLS/qmake"
+	QMAKE="$TOOLS/qmake"
 	cat > "$QMAKE" <<WRAPPER
 #!/bin/sh
 "$REAL_QMAKE" "\$@" | sed "s|$PLUGINS|$STAGE|"
@@ -145,8 +148,9 @@ if [ "$missing" -ne 0 ]; then
 	exit 1
 fi
 
-"$TOOLS/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" --output appimage
-mv "$OUTPUT" "$BUILD/$OUTPUT"
+# The tool writes the AppImage where it is run.
+(cd "$BUILD" && "$TOOLS/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" --output appimage)
+mv "$BUILD/$OUTPUT" "$ROOT/$OUTPUT"
 
 # It is started without a display, with its settings and data in a scratch
 # folder, and has to still be running when it is stopped a few seconds
@@ -155,11 +159,11 @@ mv "$OUTPUT" "$BUILD/$OUTPUT"
 scratch="$(mktemp -d)"
 status=0
 XDG_CONFIG_HOME="$scratch/config" XDG_DATA_HOME="$scratch/data" QT_QPA_PLATFORM=offscreen \
-	timeout 5 "$BUILD/$OUTPUT" || status=$?
+	timeout 5 "$ROOT/$OUTPUT" || status=$?
 rm -rf "$scratch"
 if [ "$status" -ne 124 ]; then
 	echo "The AppImage did not start: exit code $status" >&2
 	exit 1
 fi
 
-echo "Made $BUILD/$OUTPUT"
+echo "Made $OUTPUT"

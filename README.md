@@ -1,7 +1,7 @@
 # <img src="internal/appicon/appicon.png" alt="" width="40" height="40"> RegHead
 
-A desktop regular expression tester, written in Go with a Qt 6 interface using the
-[miqt](https://github.com/mappu/miqt) bindings.
+A desktop regular expression tester for Linux, written in Go with a Qt 6 interface
+using the [qute](https://github.com/nomad-software/qute) bindings.
 
 ![RegHead showing a date pattern, its highlighted matches, a substitution, the explanation and the list of matches](docs/screenshot.png)
 
@@ -111,7 +111,7 @@ differ from a real engine:
 
 ## Desktop entry
 
-On Linux, RegHead installs itself in your desktop's applications each time it starts,
+RegHead installs itself in your desktop's applications each time it starts,
 so that it can be started from the menus and kept in a dock, with its icon. It writes
 `~/.local/share/applications/reghead.desktop` and
 `~/.local/share/icons/hicolor/256x256/apps/reghead.png`, or the same under
@@ -120,23 +120,21 @@ so that it can be started from the menus and kept in a dock, with its icon. It w
 ## Settings
 
 Settings are kept as plain JSON in `settings.json`, in a `reghead` folder in the
-system's configuration directory: `~/.config/reghead/` on Linux. They include
+configuration directory, `~/.config/reghead/` (or under `$XDG_CONFIG_HOME`). They include
 the text being tested, and the file is readable only by you.
 
 ## Downloads
 
 The [releases](https://github.com/nomad-software/reghead/releases) have:
 
-- **Linux:** an AppImage that runs on most systems without installing anything. Make
-  it executable and run it.
-- **macOS on Apple Silicon:** a disk image, to drag the app into Applications. It is
-  not signed with a Developer ID, so macOS will not open it at first: open it, then
-  choose Open Anyway in System Settings > Privacy & Security.
+an AppImage that runs on most Linux systems without installing anything. Make it
+executable and run it. RegHead runs on Linux only.
 
 ## Building
 
-You need Go 1.27, a C++ compiler, `pkg-config` and the Qt 6 development
-libraries. The first build compiles the Qt bindings and takes several minutes.
+You need Linux, Go 1.27, a C++17 compiler, `pkg-config` and the development files of
+Qt 6.12 or later (`qt6-base` on Arch), as the bindings are made from Qt 6.12. The
+first build compiles the Qt bindings and takes a few minutes.
 
 ```sh
 make build       # Builds ./reghead
@@ -145,9 +143,8 @@ make test        # Runs the tests with the race detector
 make vet         # Runs go vet
 make fuzz        # Fuzzes the engines; the first run takes minutes to compile
 make screenshot  # Renders docs/screenshot.png
-make appimage    # Packs an AppImage into build/
-make macos       # Builds a disk image into build/, on a Mac
-make icons       # Remakes the macOS icon from the program's icon
+make appimage    # Packs ./RegHead-<version>-x86_64.AppImage, working in /tmp/reghead-build
+make clean       # Removes both, and /tmp/reghead-build
 ```
 
 ## Licence

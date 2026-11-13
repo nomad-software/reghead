@@ -4,10 +4,11 @@ package ui
 import (
 	"fmt"
 	"os"
-	"runtime"
 
-	qt "github.com/mappu/miqt/qt6"
-	"github.com/mappu/miqt/qt6/mainthread"
+	"github.com/nomad-software/qute"
+	"github.com/nomad-software/qute/qtcore"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
 
 	"github.com/nomad-software/reghead/internal/engine"
 	"github.com/nomad-software/reghead/internal/settings"
@@ -43,51 +44,51 @@ const (
 
 // Window is the main window.
 type Window struct {
-	*qt.QMainWindow
+	*qtwidgets.QMainWindow
 	path   string
 	config settings.Settings
 	engine engine.Engine
 
 	regex, replacement *lineField
-	errorLabel         *qt.QLabel
-	regexTitle         *qt.QLabel
-	text, output       *qt.QPlainTextEdit
-	substitution       *qt.QWidget
-	explanation        *qt.QTextBrowser
-	matches            *qt.QTreeWidget
-	matchesTitle       *qt.QLabel
-	outer, left, side  *qt.QSplitter
-	flagsMenu          *qt.QMenu
-	examplesMenu       *qt.QMenu
-	quitAction         *qt.QAction
+	errorLabel         *qtwidgets.QLabel
+	regexTitle         *qtwidgets.QLabel
+	text, output       *qtwidgets.QPlainTextEdit
+	substitution       *qtwidgets.QWidget
+	explanation        *qtwidgets.QTextBrowser
+	matches            *qtwidgets.QTreeWidget
+	matchesTitle       *qtwidgets.QLabel
+	outer, left, side  *qtwidgets.QSplitter
+	flagsMenu          *qtwidgets.QMenu
+	examplesMenu       *qtwidgets.QMenu
+	quitAction         *qtgui.QAction
 	// exampleActions are the menu's actions, in the order of examples.
-	exampleActions []*qt.QAction
-	modeActions    []*qt.QAction
-	engineActions  []*qt.QAction
-	flagsButton    *qt.QToolButton
-	copyButton     *qt.QToolButton
+	exampleActions []*qtgui.QAction
+	modeActions    []*qtgui.QAction
+	engineActions  []*qtgui.QAction
+	flagsButton    *qtwidgets.QToolButton
+	copyButton     *qtwidgets.QToolButton
 	// inlineFlags shows, in the regex field but out of reach of editing, what
 	// the flags add to the pattern.
-	inlineFlags *qt.QLabel
+	inlineFlags *qtwidgets.QLabel
 
 	// running says an evaluation is under way, and pending that what it
 	// evaluates has changed since. Only the UI's thread touches them.
 	running, pending bool
 	result           *engine.Result
 	// autosave saves the settings a moment after a change.
-	autosave *qt.QTimer
+	autosave *qtcore.QTimer
 	// colours are those of the theme, as of the last render.
 	colours syntax
 	// hover is what the mouse is over, and litRows the rows lit up for it.
 	hover   hoverTarget
-	litRows []*qt.QTreeWidgetItem
+	litRows []*qtwidgets.QTreeWidgetItem
 }
 
 // NewWindow makes the window, with the settings at path.
 func NewWindow(path string) *Window {
 	config := settings.Load(path)
 	w := &Window{
-		QMainWindow: qt.NewQMainWindow2(),
+		QMainWindow: qtwidgets.NewQMainWindow(nil),
 		path:        path,
 		config:      config,
 		engine:      engine.ByName(config.Engine),
@@ -107,23 +108,23 @@ func NewWindow(path string) *Window {
 	w.regex.OnTextChanged(w.regexChanged)
 	w.replacement.OnTextChanged(w.refresh)
 	w.text.OnTextChanged(w.refresh)
-	w.matches.OnCurrentItemChanged(func(current, _ *qt.QTreeWidgetItem) { w.selectMatch(current) })
+	w.matches.OnCurrentItemChanged(func(current, _ *qtwidgets.QTreeWidgetItem) { w.selectMatch(current) })
 
 	w.watchHover()
 
-	w.OnChangeEvent(func(super func(*qt.QEvent), e *qt.QEvent) {
+	w.OverrideChangeEvent(func(super func(*qtcore.QEvent), e *qtcore.QEvent) {
 		super(e)
-		if t := e.Type(); t == qt.QEvent__PaletteChange || t == qt.QEvent__ApplicationPaletteChange {
+		if t := e.Type(); t == qtcore.QEventPaletteChange || t == qtcore.QEventApplicationPaletteChange {
 			w.render()
 		}
 	})
 	// What is entered is saved soon after it changes, so that it survives the program
 	// ending without its window being closed, as in a crash.
-	w.autosave = qt.NewQTimer2(w.QObject)
+	w.autosave = qtcore.NewQTimer(w)
 	w.autosave.SetSingleShot(true)
 	w.autosave.OnTimeout(w.saveSettings)
 
-	w.OnCloseEvent(func(super func(*qt.QCloseEvent), e *qt.QCloseEvent) {
+	w.OverrideCloseEvent(func(super func(*qtgui.QCloseEvent), e *qtgui.QCloseEvent) {
 		w.autosave.Stop()
 		w.saveSettings()
 		super(e)
@@ -139,95 +140,90 @@ func (w *Window) Start() {
 	} else {
 		w.Show()
 	}
-	mainthread.Start(w.restoreLayout)
+	qute.Post(w.restoreLayout)
 	w.refresh()
 }
 
 // makeWidgets makes the widgets and sets them out.
 func (w *Window) makeWidgets() {
-	// Values Qt returns belong to the garbage collector, and references to
-	// the widget: only what is made here with a constructor is deleted.
-	fixed := qt.QFontDatabase_SystemFont(qt.QFontDatabase__FixedFont)
-	defer runtime.KeepAlive(fixed)
+	fixed := qtgui.QFontDatabaseGetSystemFont(qtgui.QFontDatabaseFixedFont)
 
 	w.regex = newLineField(fixed)
 	w.regex.SetText(w.config.Pattern)
 	w.makeInlineFlags(fixed)
-	w.flagsMenu = qt.NewQMenu2()
+	w.flagsMenu = qtwidgets.NewQMenu(nil)
 	// A flag is ticked without closing the menu, so that several can be set.
-	w.flagsMenu.OnMouseReleaseEvent(func(super func(*qt.QMouseEvent), e *qt.QMouseEvent) {
+	w.flagsMenu.OverrideMouseReleaseEvent(func(super func(*qtgui.QMouseEvent), e *qtgui.QMouseEvent) {
 		if a := w.flagsMenu.ActiveAction(); a != nil {
 			a.Trigger()
 			return
 		}
 		super(e)
 	})
-	w.flagsButton = qt.NewQToolButton2()
+	w.flagsButton = qtwidgets.NewQToolButton(nil)
 	w.flagsButton.SetMenu(w.flagsMenu)
-	w.flagsButton.SetPopupMode(qt.QToolButton__InstantPopup)
+	w.flagsButton.SetPopupMode(qtwidgets.QToolButtonInstantPopup)
 	w.flagsButton.SetToolTip("Flags")
-	regexRow := qt.NewQHBoxLayout2()
-	regexRow.AddWidget(w.regex.QWidget)
-	regexRow.AddWidget(w.flagsButton.QWidget)
-	w.copyButton = qt.NewQToolButton2()
+	regexRow := qtwidgets.NewQHBoxLayout(nil)
+	regexRow.AddWidget(w.regex)
+	regexRow.AddWidget(w.flagsButton)
+	w.copyButton = qtwidgets.NewQToolButton(nil)
 	w.copyButton.SetText("Copy")
 	w.copyButton.SetToolTip("Copy the regular expression, with its flags")
 	w.copyButton.SetEnabled(w.regex.Text() != "")
-	w.copyButton.OnClicked(func() {
-		qt.QGuiApplication_Clipboard().SetText(w.fullPattern())
+	w.copyButton.OnClicked(func(bool) {
+		qtgui.QGuiApplicationClipboard().SetText(w.fullPattern())
 	})
-	regexRow.AddWidget(w.copyButton.QWidget)
+	regexRow.AddWidget(w.copyButton)
 	w.fillFlagsMenu()
-	w.errorLabel = qt.NewQLabel2()
-	w.errorLabel.SetTextFormat(qt.PlainText)
+	w.errorLabel = qtwidgets.NewQLabel(nil)
+	w.errorLabel.SetTextFormat(qtcore.PlainText)
 	w.errorLabel.SetWordWrap(true)
 	w.errorLabel.Hide()
 
-	w.text = qt.NewQPlainTextEdit2()
+	w.text = qtwidgets.NewQPlainTextEdit(nil)
 	w.text.SetFont(fixed)
 	w.text.SetPlainText(w.config.Text)
 
 	w.replacement = newLineField(fixed)
 	w.replacement.SetPlaceholderText(w.engine.ReplacementHint())
 	w.replacement.SetText(w.config.Replacement)
-	w.output = qt.NewQPlainTextEdit2()
+	w.output = qtwidgets.NewQPlainTextEdit(nil)
 	w.output.SetFont(fixed)
 	w.output.SetReadOnly(true)
 
-	w.substitution = qt.NewQWidget2()
-	subLayout := qt.NewQVBoxLayout(w.substitution)
-	subLayout.SetContentsMargins(0, 0, 0, 0)
-	subLayout.AddWidget(titleLabel("Replacement").QWidget)
-	subLayout.AddWidget(w.replacement.QWidget)
-	subLayout.AddWidget(titleLabel("Result").QWidget)
-	subLayout.AddWidget(w.output.QWidget)
+	w.substitution = qtwidgets.NewQWidget(nil)
+	subLayout := qtwidgets.NewQVBoxLayout(w.substitution)
+	subLayout.SetContentsMargins(qtcore.QMargins{})
+	subLayout.AddWidget(titleLabel("Replacement"))
+	subLayout.AddWidget(w.replacement)
+	subLayout.AddWidget(titleLabel("Result"))
+	subLayout.AddWidget(w.output)
 	w.substitution.SetVisible(w.config.Mode == settings.ModeSubstitute)
 
-	w.left = newPaneSplitter(qt.Vertical)
+	w.left = newPaneSplitter(qtcore.Vertical)
 	w.left.SetChildrenCollapsible(false)
-	w.left.AddWidget(titled(titleLabel("Text"), w.text.QWidget))
+	w.left.AddWidget(titled(titleLabel("Text"), w.text))
 	w.left.AddWidget(w.substitution)
 
-	main := qt.NewQWidget2()
-	mainLayout := qt.NewQVBoxLayout(main)
-	mainLayout.SetContentsMargins(0, 0, 0, 0)
+	main := qtwidgets.NewQWidget(nil)
+	mainLayout := qtwidgets.NewQVBoxLayout(main)
+	mainLayout.SetContentsMargins(qtcore.QMargins{})
 	w.regexTitle = titleLabel(regexTitleText(w.engine))
-	mainLayout.AddWidget(w.regexTitle.QWidget)
-	mainLayout.AddLayout(regexRow.QLayout)
-	mainLayout.AddWidget(w.errorLabel.QWidget)
-	mainLayout.AddWidget2(w.left.QWidget, 1)
+	mainLayout.AddWidget(w.regexTitle)
+	mainLayout.AddLayout(regexRow)
+	mainLayout.AddWidget(w.errorLabel)
+	mainLayout.AddWidgetFull(w.left, 1, 0)
 
-	w.explanation = qt.NewQTextBrowser2()
+	w.explanation = qtwidgets.NewQTextBrowser(nil)
 	w.explanation.SetOpenLinks(false)
 	w.explanation.SetPlaceholderText("Enter a regular expression to have it explained here.")
 
-	w.matches = qt.NewQTreeWidget2()
+	w.matches = qtwidgets.NewQTreeWidget(nil)
 	w.matches.SetColumnCount(matchColumns)
 	w.matches.SetHeaderLabels([]string{"Match", "Position", "Value"})
 	w.matches.SetUniformRowHeights(true)
-	dotSize := qt.NewQSize2(matchDotSize, matchDotSize)
-	w.matches.SetIconSize(dotSize)
-	dotSize.Delete()
+	w.matches.SetIconSize(qtcore.QSize{Width: matchDotSize, Height: matchDotSize})
 	w.matches.Header().SetStretchLastSection(true)
 	// The first column has room for a group's name, unless it was resized.
 	w.matches.Header().ResizeSection(0, 170)
@@ -238,27 +234,27 @@ func (w *Window) makeWidgets() {
 	}
 	w.matchesTitle = titleLabel("Matches")
 
-	w.side = newPaneSplitter(qt.Vertical)
+	w.side = newPaneSplitter(qtcore.Vertical)
 	w.side.SetChildrenCollapsible(false)
-	w.side.AddWidget(titled(titleLabel("Explanation"), w.explanation.QWidget))
-	w.side.AddWidget(titled(w.matchesTitle, w.matches.QWidget))
+	w.side.AddWidget(titled(titleLabel("Explanation"), w.explanation))
+	w.side.AddWidget(titled(w.matchesTitle, w.matches))
 
-	w.outer = newPaneSplitter(qt.Horizontal)
+	w.outer = newPaneSplitter(qtcore.Horizontal)
 	w.outer.SetChildrenCollapsible(false)
 	w.outer.AddWidget(main)
-	w.outer.AddWidget(w.side.QWidget)
+	w.outer.AddWidget(w.side)
 	// Growing the window grows the main pane, and the side pane keeps its size.
 	w.outer.SetStretchFactor(0, 1)
 	w.outer.SetStretchFactor(1, 0)
 
-	for _, splitter := range []*qt.QSplitter{w.left, w.side, w.outer} {
+	for _, splitter := range []*qtwidgets.QSplitter{w.left, w.side, w.outer} {
 		splitter.SetHandleWidth(paneHandleWidth)
 	}
 
-	central := qt.NewQWidget2()
-	layout := qt.NewQVBoxLayout(central)
-	layout.SetContentsMargins(windowMargin, windowMargin, windowMargin, windowMargin)
-	layout.AddWidget(w.outer.QWidget)
+	central := qtwidgets.NewQWidget(nil)
+	layout := qtwidgets.NewQVBoxLayout(central)
+	layout.SetContentsMargins(qtcore.QMargins{Left: windowMargin, Top: windowMargin, Right: windowMargin, Bottom: windowMargin})
+	layout.AddWidget(w.outer)
 	w.SetCentralWidget(central)
 	// A status bar along the bottom, which shows no text and is there for the
 	// handle in its corner, to drag the window bigger or smaller by.
@@ -295,7 +291,7 @@ func (w *Window) saveSettings() {
 func (w *Window) refresh() {
 	// The first run is of what was just loaded, which has nothing new to save.
 	if w.result != nil {
-		w.autosave.Start(autosaveDelay)
+		w.autosave.StartWithInterval(autosaveDelay)
 	}
 	if w.running {
 		w.pending = true
@@ -312,7 +308,7 @@ func (w *Window) refresh() {
 	}
 	go func() {
 		result := engine.Evaluate(request)
-		mainthread.Start(func() {
+		qute.Post(func() {
 			w.running = false
 			if w.pending {
 				w.pending = false

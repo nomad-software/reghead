@@ -1,13 +1,15 @@
 # RegHead
 
-A regular expression tester in Go with a Qt 6 UI through
-miqt (`github.com/mappu/miqt/qt6`). The app is called RegHead; the binary, module
-and folders are `reghead`. Keep the README up to date with any change users see.
+A regular expression tester for Linux, in Go with a Qt 6 UI through qute
+(`github.com/nomad-software/qute`). The app is called RegHead; the binary, module
+and folders are `reghead`. It is for Linux only. Keep the README up to date with any change users see.
 
 ## Commands
 
 `make build`, `make run`, `make test` (race detector), `make vet`, `make fuzz`,
-`make screenshot`. The UI tests run offscreen (`QT_QPA_PLATFORM=offscreen`), so
+`make screenshot`, `make appimage`, `make clean`. Builds work in `/tmp/reghead-build`,
+never in the project; only the binary `reghead` and the AppImage
+`RegHead-<version>-x86_64.AppImage` are left in its root, and both are gitignored. The UI tests run offscreen (`QT_QPA_PLATFORM=offscreen`), so
 they need no display. Run `make fuzz` after changing an explainer, a translator or
 how replacements parse. Its first run recompiles the Qt bindings with coverage, as
 the engine package imports Qt, which takes minutes and is not a hang.
@@ -32,11 +34,12 @@ the engine package imports Qt, which takes minutes and is not a hang.
 - `internal/ui/examples.go`: the Examples menu's data, listed in a submenu per
   engine. Choosing one switches to its engine. A test runs each and checks `expected`
   matches. A new engine needs at least five, or a test fails.
-- `packaging/` and `.github/workflows/`: the AppImage and macOS app. The workflows run
-  on a `v*` tag, attaching to a release, or by hand, keeping an artifact. Each builds
-  with Qt's plugins checked, and starts the result to prove it runs.
+- `packaging/` and `.github/workflows/`: the AppImage, built with Qt's own Qt 6.12 on
+  Ubuntu 22.04. The workflow runs on a `v*` tag, attaching to a release, or by hand,
+  keeping an artifact. It builds with Qt's plugins checked, and starts the result to
+  prove it runs. There is no macOS or Windows build, by decision.
 - `internal/appicon`: the embedded icon, `appicon.png`, which is hand-made artwork.
-  Do not regenerate or replace it. After it changes, run `make icons` for the macOS one.
+  Do not regenerate or replace it.
 
 ## Things to keep true
 
@@ -82,7 +85,7 @@ the engine package imports Qt, which takes minutes and is not a hang.
 - **Offsets:** engines report byte offsets. Qt positions are UTF-16 units and the
   match list shows characters, so always convert through `engine.Offsets`.
 - **Evaluation is off the UI thread:** `Window.refresh` runs one `Evaluate` at a
-  time in a goroutine, and returns to the UI with `mainthread.Start`. Changes made
+  time in a goroutine, and returns to the UI with `qute.Post`. Changes made
   meanwhile set `pending`, the stale result is dropped and a new run starts. A
   backtracking engine can take seconds. Nothing paints from a result while `running`,
   as its positions may not fit the text. `Evaluate` recovers from panics, as one there
@@ -103,19 +106,29 @@ the engine package imports Qt, which takes minutes and is not a hang.
   and on SIGINT, SIGTERM or SIGHUP (`main.go`). Hidden panes report a size of 0, so
   `TextHeight` is only read while the substitution pane shows.
 
-## miqt ownership
+## qute
 
-Crashes (`free(): invalid pointer`) come from getting this wrong:
+The bindings are qute (`github.com/nomad-software/qute`), the user's own project,
+which sits beside this one in `../qute`. It needs Qt 6.12 or later. A panic from qute
+names the method, what went wrong and the fix; read it before guessing.
 
-- Delete only what you made with a `New...` constructor.
-- Never delete a value a method returned. `Font()`, `Palette()` and
-  `ColorWithCr()` are references Qt owns. `TextCursor()`, `Grab()` and
-  `QFontDatabase_SystemFont()` carry a Go finalizer. Check the `gen_*.go` source
-  if unsure, and use `runtime.KeepAlive` for a finalized value still in use.
-- Virtual methods (`On...Event`) can only be overridden on widgets constructed
-  from Go, or miqt panics. Splitter handles are made through `OnCreateHandle` for
-  this reason (`newPaneSplitter`), which is what lets them paint only grip dots.
-- Touch widgets only on the main thread; tests use `mainthread.Wait`.
-
-miqt is pinned to a commit of its master branch, not the last tag (v0.15.0), for
-its recent bug fixes. A new version recompiles all the bindings, which is slow.
+- `qute.Main` (in `main.go`) makes the `QApplication` and runs the event loop. Tests
+  use `qutetest.TestMain`, and run what touches Qt in `qutetest.Run(t, f)`, or
+  `onUI` for a result.
+- Every Qt call must be on the UI's thread, or qute panics, except on its reentrant
+  classes, `QRegularExpression` and its matches, which `pcre.go` uses in the
+  evaluation's goroutine. From other goroutines use `qute.Post`.
+- What is made with a constructor and not handed to Qt is freed by the garbage
+  collector, on the UI's thread. Values Qt returns (`Font()`, `Palette()`,
+  `TextCursor()`) are Go's own copies. `Delete()` is only for freeing at once, as
+  `highlightUTF16` does with its thousands of selections. Inside a handler, delete a
+  QObject with `DeleteLater()`. Without a `QApplication`, as in the engine's tests,
+  the garbage collector frees nothing, so `pcreRegex.Release` frees the regex and
+  `FindAll` its matches.
+- `QPoint`, `QRect`, `QSize`, `QMargins` and `QColor` are plain Go structs. Colours
+  are made from their names with `colour`.
+- Virtuals are replaced with `Override<Name>` on objects made by a qute constructor,
+  and panic on objects Qt made. Splitter handles are made through
+  `OverrideCreateHandle` for this reason (`newPaneSplitter`), which is what lets them
+  paint only grip dots. Protected methods are reached through `Protected()`.
+- A painter is used inside `qtgui.PaintOn`, which ends and frees it.

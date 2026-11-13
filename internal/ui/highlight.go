@@ -3,11 +3,11 @@ package ui
 import (
 	"fmt"
 	"html"
-	"runtime"
 	"slices"
 	"strings"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/nomad-software/qute/qtgui"
+	"github.com/nomad-software/qute/qtwidgets"
 
 	"github.com/nomad-software/reghead/internal/engine"
 )
@@ -17,11 +17,9 @@ func (w *Window) render() {
 	if w.result == nil {
 		return
 	}
-	palette := w.Palette()
-	base := palette.ColorWithCr(qt.QPalette__Base)
+	base := w.Palette().Color(qtgui.QPaletteBase)
 	colours := syntaxFor(base.Lightness() < 128)
 	w.colours = colours
-	runtime.KeepAlive(palette)
 
 	w.errorLabel.SetStyleSheet("color: " + colours.errorText)
 	w.inlineFlags.SetStyleSheet(tokenStyle(colours.token(engine.Token{Kind: engine.TokenModifier})))
@@ -67,16 +65,14 @@ func (w *Window) paintRegex(colours syntax) {
 	if g := w.hover.group; g >= 0 && g < len(w.result.GroupRanges) {
 		spans = append(spans, paintedSpan{w.result.GroupRanges[g], colours.edge(g), colours.hoverText})
 	}
-	highlight(w.regex.QPlainTextEdit, spans, offsets)
+	highlight(w.regex, spans, offsets)
 }
 
 // explanationHTML sets out the steps of an explanation, indented by depth: each
 // fragment, highlighted as a pattern, with what it does after it.
 func explanationHTML(nodes []engine.Node, colours syntax) string {
 	var b strings.Builder
-	fixed := qt.QFontDatabase_SystemFont(qt.QFontDatabase__FixedFont)
-	family := html.EscapeString(fixed.Family())
-	runtime.KeepAlive(fixed)
+	family := html.EscapeString(qtgui.QFontDatabaseGetSystemFont(qtgui.QFontDatabaseFixedFont).Family())
 	var walk func(nodes []engine.Node, depth int)
 	walk = func(nodes []engine.Node, depth int) {
 		for _, n := range nodes {
@@ -105,7 +101,6 @@ func (w *Window) paintExplanation(colours syntax) {
 				start := block.Position()
 				spans = append(spans, paintedSpan{engine.Span{Start: start, End: start + block.Length() - 1}, colours.edge(g), colours.hoverText})
 			}
-			runtime.KeepAlive(block)
 		}
 	}
 	highlightUTF16(w.explanation, spans)
@@ -192,7 +187,7 @@ func (w *Window) paintReplacement(colours syntax) {
 	if w.hover.group == 0 && text != "" {
 		lit = []paintedSpan{{engine.Span{Start: 0, End: len(text)}, colours.edge(0), colours.hoverText}}
 	}
-	highlight(w.replacement.QPlainTextEdit, append(spans, lit...), engine.NewOffsets(text))
+	highlight(w.replacement, append(spans, lit...), engine.NewOffsets(text))
 }
 
 // paintedSpan is a span of an editor and how it is coloured.
@@ -204,8 +199,8 @@ type paintedSpan struct {
 
 // highlighter is a text pane that can colour parts of its text.
 type highlighter interface {
-	TextCursor() *qt.QTextCursor
-	SetExtraSelections([]qt.QTextEdit__ExtraSelection)
+	TextCursor() *qtgui.QTextCursor
+	SetExtraSelections([]*qtwidgets.QTextEditExtraSelection)
 }
 
 // highlight colours spans of an editor, given in bytes of its text.
@@ -220,50 +215,53 @@ func highlight(edit highlighter, spans []paintedSpan, offsets *engine.Offsets) {
 
 // highlightUTF16 colours spans of an editor, given in Qt's positions.
 func highlightUTF16(edit highlighter, spans []paintedSpan) {
-	formats := map[[2]string]*qt.QTextCharFormat{}
+	formats := map[[2]string]*qtgui.QTextCharFormat{}
 	for _, span := range spans {
 		key := [2]string{span.background, span.text}
 		if formats[key] == nil {
 			formats[key] = newSpanFormat(span.background, span.text)
 		}
 	}
-	selections := make([]qt.QTextEdit__ExtraSelection, 0, len(spans))
+	// Each is copied into the editor, so what is made here is freed at once, as
+	// there can be thousands.
+	cursor := edit.TextCursor()
+	selections := make([]*qtwidgets.QTextEditExtraSelection, 0, len(spans))
 	for _, span := range spans {
-		format := formats[[2]string{span.background, span.text}]
-		cursor := edit.TextCursor()
 		cursor.SetPosition(span.Start)
-		cursor.SetPosition2(span.End, qt.QTextCursor__KeepAnchor)
-		selection := qt.NewQTextEdit__ExtraSelection2()
-		selection.SetCursor(*cursor)
-		selection.SetFormat(*format)
-		selections = append(selections, *selection)
-		runtime.KeepAlive(cursor)
+		cursor.SetPositionFull(span.End, qtgui.QTextCursorKeepAnchor)
+		selection := qtwidgets.NewQTextEditExtraSelection()
+		selection.SetCursor(cursor)
+		selection.SetFormat(formats[[2]string{span.background, span.text}])
+		selections = append(selections, selection)
 	}
 	edit.SetExtraSelections(selections)
-	for i := range selections {
-		selections[i].Delete()
+	for _, selection := range selections {
+		selection.Delete()
 	}
 	for _, format := range formats {
 		format.Delete()
 	}
+	cursor.Delete()
 }
 
 // newSpanFormat returns the format of a span.
-func newSpanFormat(background, text string) *qt.QTextCharFormat {
-	format := qt.NewQTextCharFormat()
+func newSpanFormat(background, text string) *qtgui.QTextCharFormat {
+	format := qtgui.NewQTextCharFormat()
 	if background != "" {
-		colour := qt.NewQColor6(background)
-		brush := qt.NewQBrush3(colour)
-		format.SetBackground(brush)
-		brush.Delete()
-		colour.Delete()
+		format.SetBackground(qtgui.NewQBrushWithColor(colour(background)))
 	}
 	if text != "" {
-		colour := qt.NewQColor6(text)
-		brush := qt.NewQBrush3(colour)
-		format.SetForeground(brush)
-		brush.Delete()
-		colour.Delete()
+		format.SetForeground(qtgui.NewQBrushWithColor(colour(text)))
 	}
 	return format
+}
+
+// colour returns the colour of a "#rrggbb" name, as syntax.go and theme.go give
+// them.
+func colour(name string) qtgui.QColor {
+	c, err := qtgui.ParseColor(name)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }

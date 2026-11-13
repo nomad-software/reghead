@@ -108,6 +108,10 @@ type Regex interface {
 	FindAll(text string, n int) ([]Match, error)
 }
 
+// releaser is a Regex that holds memory outside Go, which Evaluate frees when it
+// is done with it.
+type releaser interface{ Release() }
+
 // ReplacementPart is a part of a replacement template. It is either Literal text
 // or, if IsRef, a reference to a group by Name or, where Number is not -1, number.
 type ReplacementPart struct {
@@ -262,6 +266,9 @@ func Evaluate(q Request) (r Result) {
 	if err != nil {
 		r.Error = err.Error()
 		return r
+	}
+	if rel, ok := re.(releaser); ok {
+		defer rel.Release()
 	}
 	r.Explanation = nodes
 	r.GroupNames = re.GroupNames()
